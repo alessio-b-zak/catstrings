@@ -62,6 +62,6 @@ type Display =
 newtype Cells = Cells (Array Cell)
 
 type ViewControls = 
-  { vcProject :: Int
-  , vcSlices :: Array Int
+  { project :: Int
+  , slices :: Array Int
   } 
