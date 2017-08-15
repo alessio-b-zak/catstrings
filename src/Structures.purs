@@ -25,11 +25,19 @@ data Diagram = Diagram
   , dimension :: Int
   }
 
+type ReplacementDiagram =
+  { diagram :: Diagram
+  , offset :: Array Int
+  }
+
 diagramSource :: Diagram -> Maybe Diagram
 diagramSource (Diagram { source }) = source
 
 diagramCells :: Diagram -> Array DiagramCell
 diagramCells (Diagram { cells }) = cells
+
+diagramDimension :: Diagram -> Int
+diagramDimension (Diagram { dimension }) = dimension
 
 data Signature  = Signature 
   { cells :: Cells     -- Cells of the signature
