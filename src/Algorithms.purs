@@ -1,13 +1,15 @@
 module Algorithms where
-  
+
+import Prelude
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Array (drop, init, length, modifyAt, snoc, zipWith)
+import Data.Traversable (sequence)
+import Control.MonadZero (guard)
+
+import Color (black)
+
 import Utilities
 import Structures
-import Prelude
-import Data.Maybe
-import Data.Array
-import Color (black)
-import Data.Traversable
-import Control.MonadZero
 
 identityDiag :: Diagram -> Diagram
 identityDiag diag = Diagram newDiag
