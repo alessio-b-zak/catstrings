@@ -1,7 +1,7 @@
 module Structures where
 
 import Prelude
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Color
 
 type Project = 
@@ -45,6 +45,18 @@ data Signature  = Signature
   , k :: Int -- Number of generators at this dimension
   , n :: Int -- Dimension of the signature
   }
+
+signatureCells :: Signature -> Cells
+signatureCells (Signature s) = s.cells
+
+signatureSigma :: Signature -> Maybe Signature
+signatureSigma (Signature s) = s.sigma
+
+signatureK :: Signature -> Int
+signatureK (Signature s) = s.k
+
+signatureN :: Signature -> Int
+signatureN (Signature s) = s.n
 
 type Cell = 
   { source :: Maybe Diagram

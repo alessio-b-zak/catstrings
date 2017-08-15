@@ -1,8 +1,19 @@
 module Utilities where
-  
-import Data.Maybe
+
 import Prelude
-import Data.Array
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Array (filter, last)
+import Data.String as Str
+
+import Halogen.HTML.Core as HCore
+import Halogen.HTML.Properties as HP
+import DOM (DOM)
+import DOM.Event.Types (Event)
+import DOM.HTML.Event.Types (DragEvent, dragEventToEvent)
+import DOM.Event.Event (stopPropagation, preventDefault)
+
+classes :: forall r i . Array String -> HP.IProp ("class" :: String | r) i
+classes = HP.classes <<< map HCore.ClassName <<< filter (not <<< Str.null)
 
 splitAt :: forall a . Int -> Array a -> Maybe {before :: Array a, after :: Array a}
 splitAt = _splitAt Just Nothing

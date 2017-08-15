@@ -1,12 +1,8 @@
 module CatStrings where
 
 import Prelude
-import Data.Maybe (Maybe(..))
-import Data.Functor.Coproduct (Coproduct)
-import Data.Either (Either)
-import Control.Monad.Eff (Eff)
+import Data.Maybe (Maybe(..), maybe)
 import Control.Monad.Aff (Aff)
-
 
 import DOM (DOM)
 import Halogen as H
@@ -15,28 +11,61 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-type State = Unit
+import Structures
+import Utilities
 
-data Query a = DoSomething a
+type State = Project
+
+data Query a = NewZero a
 data Message
 
-type ChildSlot = Either Unit Unit
-
-type ChildQuery = Coproduct Query Query
-
-csApp :: forall eff. H.Component HH.HTML Query Unit Void (Aff (dom :: DOM | eff))
+csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (dom :: DOM | eff))
 csApp =
-  H.parentComponent
-    { initialState: const unit
+  H.component
+    { initialState: const initial
     , render
     , eval
     , receiver: const Nothing
     }
   where
-  render :: State -> H.ParentHTML Query ChildQuery ChildSlot (Aff (dom :: DOM | eff))
-  render state = HH.div_ []
   
-  eval :: Query ~> H.ParentDSL State Query ChildQuery ChildSlot Void (Aff (dom :: DOM | eff))
+  initial :: State
+  initial =
+    { diagram: Nothing
+    , signature: Signature 
+      { cells: Cells []
+      , sigma: Nothing
+      , k: 0
+      , n: 0
+      }
+    , cacheSourceTarget: Nothing
+    , initialized: false
+    , viewControls: { project: 0, slices: [] }
+    , selectedCell: Nothing
+    }
+  
+  render :: State -> H.ComponentHTML Query
+  render project =
+    HH.div [classes ["app"]]
+      [ renderSignature project.signature
+      ]
+  
+  renderSignature :: Signature -> H.ComponentHTML Query
+  renderSignature signature =
+    HH.div [classes ["signature"]] $
+      [ HH.p_ [ HH.text "New zerocell" ]
+      ] <> renderSigma signature
+  
+  renderSigma :: Signature -> Array (H.ComponentHTML Query)
+  renderSigma signature =
+    maybe [] renderSigma (signatureSigma signature) <> 
+    [ HH.div [classes ["sigma"]]
+      [ HH.h2_ [ HH.text (show (signatureN signature) <> "-cells") ]
+      , HH.div [classes ["cells"]] []
+      ]
+    ]
+  
+  eval :: Query ~> H.ComponentDSL State Query Message (Aff (dom :: DOM | eff))
   eval = case _ of
-    DoSomething reply ->
+    NewZero reply ->
       pure reply
