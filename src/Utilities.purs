@@ -27,3 +27,5 @@ foreign import _splitAt :: forall b .
 
 lastOrZero :: Array Int -> Int
 lastOrZero xs = fromMaybe 0 $ last xs
+
+foreign import mapWithIndex :: forall a b . (Int -> a -> b) -> Array a -> Array b
