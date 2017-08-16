@@ -11,7 +11,9 @@
     "purescript-console": "^3.0.0",
     "purescript-maybe": "^3.0.0",
     "purescript-colors": "^3.1.0",
-    "purescript-halogen": "^2.1.0"
+    "purescript-halogen": "^2.1.0",
+    "purescript-halogen-css": "^6.0.0",
+    "purescript-css": "^3.1.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^3.0.0"

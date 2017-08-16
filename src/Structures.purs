@@ -49,14 +49,32 @@ data Signature  = Signature
 signatureCells :: Signature -> Cells
 signatureCells (Signature s) = s.cells
 
+signatureCells' :: Signature -> Cells -> Signature
+signatureCells' (Signature s) cells = Signature $ s {cells = cells}
+
+signatureCellArray :: Signature -> Array Cell
+signatureCellArray (Signature {cells: Cells cs}) = cs
+
+signatureCellArray' :: Signature -> Array Cell -> Signature
+signatureCellArray' (Signature s) cells = Signature $ s {cells = Cells cells}
+
 signatureSigma :: Signature -> Maybe Signature
 signatureSigma (Signature s) = s.sigma
+
+signatureSigma' :: Signature -> Maybe Signature -> Signature
+signatureSigma' (Signature s) sigma = Signature $ s {sigma = sigma}
 
 signatureK :: Signature -> Int
 signatureK (Signature s) = s.k
 
+signatureK' :: Signature -> Int -> Signature
+signatureK' (Signature s) k = Signature $ s {k = k}
+
 signatureN :: Signature -> Int
 signatureN (Signature s) = s.n
+
+signatureN' :: Signature -> Int -> Signature
+signatureN' (Signature s) n = Signature $ s {n = n}
 
 type Cell = 
   { source :: Maybe Diagram

@@ -31,9 +31,17 @@ newZeroCell project =
                   }
         updateSignature :: Signature -> Signature
         updateSignature (Signature s@{cells: (Cells cells), sigma: Nothing}) = 
-           Signature $ s { cells = Cells (cells `snoc` newZero), k = s.k + 1 }
-        updateSignature (Signature s@{sigma: Just sigma})   = Signature $ s { sigma = Just $ updateSignature sigma }
+           Signature (s { cells = Cells (cells `snoc` newZero), k = s.k + 1 })
+        updateSignature (Signature s@{sigma: Just sigma}) =
+            Signature (s { sigma = Just $ updateSignature sigma })
      in project { signature = updateSignature project.signature}
+
+updateSignature :: (Cell -> Cell) -> Int -> Int -> Signature -> Maybe Signature
+updateSignature f dim i sig
+  | signatureN sig == dim =
+      signatureCellArray' sig <$> modifyAt i f (signatureCellArray sig)
+  | otherwise =
+      signatureSigma' sig <$> sequence (updateSignature f dim i <$> signatureSigma sig)
 
 rewrite :: Array Int -> Diagram -> Diagram -> Diagram -> Maybe Diagram
 rewrite coords baseDiagram sourceRewrite targetRewrite =

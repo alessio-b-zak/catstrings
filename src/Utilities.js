@@ -9,6 +9,7 @@ exports._splitAt = function (just) {
     };
   };
 };
+
 exports.mapWithIndex = function (f) {
   return function (arr) {
     var l = arr.length;
@@ -17,5 +18,11 @@ exports.mapWithIndex = function (f) {
       result[i] = f(i)(arr[i]);
     }
     return result;
+  };
+};
+
+exports.inputValue = function(event) {
+  return function () {
+    return event.target.value;
   };
 };
