@@ -2,28 +2,32 @@ module Structures where
 
 import Prelude
 import Data.Maybe (Maybe(Nothing))
+import Data.Tuple (Tuple(..))
 import Data.Foldable
-import Color
 import Data.Array
+import Data.Generic (class Generic, gShow, gEq)
+import Color
+
+data CellID = CellID Int Int
+derive instance eqCellID :: Eq CellID
 
 type Project = 
   { diagram :: Maybe Diagram
   , signature :: Signature
-  , cacheSourceTarget :: Maybe Unit
+  , cacheSourceTarget :: Maybe (Tuple Boundary Diagram)
   , initialized :: Boolean
   , viewControls :: ViewControls
   , selectedCell :: Maybe Cell
   } 
 
 type DiagramCell = 
-  { cell :: Cell
-  , id :: String
+  { id :: CellID
   , key :: Array Int
-  , box :: Maybe Box }
+  , box :: Maybe Box
+  }
 
 eqDiagramCell :: DiagramCell -> DiagramCell -> Boolean
 eqDiagramCell diagramCell1 diagramCell2 =
-    eqCell diagramCell1.cell diagramCell2.cell &&
     diagramCell1.id == diagramCell2.id &&
     diagramCell1.key == diagramCell2.key 
 
@@ -59,8 +63,8 @@ diagramDimension (Diagram { dimension }) = dimension
 data Signature  = Signature 
   { cells :: Cells     -- Cells of the signature
   , sigma :: Maybe Signature -- Based on this signature
-  , k :: Int -- Number of generators at this dimension
-  , n :: Int -- Dimension of the signature
+  , dimension :: Int -- Dimension of the signature
+  , id :: Int -- Next id to use
   }
 
 signatureCells :: Signature -> Cells
@@ -81,22 +85,16 @@ signatureSigma (Signature s) = s.sigma
 signatureSigma' :: Signature -> Maybe Signature -> Signature
 signatureSigma' (Signature s) sigma = Signature $ s {sigma = sigma}
 
-signatureK :: Signature -> Int
-signatureK (Signature s) = s.k
+signatureDimension :: Signature -> Int
+signatureDimension (Signature s) = s.dimension
 
-signatureK' :: Signature -> Int -> Signature
-signatureK' (Signature s) k = Signature $ s {k = k}
-
-signatureN :: Signature -> Int
-signatureN (Signature s) = s.n
-
-signatureN' :: Signature -> Int -> Signature
-signatureN' (Signature s) n = Signature $ s {n = n}
+signatureDimension' :: Signature -> Int -> Signature
+signatureDimension' (Signature s) dimension = Signature $ s {dimension = dimension}
 
 type Cell = 
   { source :: Maybe Diagram
   , target :: Maybe Diagram
-  , id :: String
+  , id :: CellID
   , invertible :: Boolean
   , name :: String
   , singleThumbnail :: Boolean
@@ -122,8 +120,17 @@ type Display =
   }
 
 newtype Cells = Cells (Array Cell)
+getCells :: Cells -> Array Cell
+getCells (Cells cells) = cells
 
 type ViewControls = 
   { project :: Int
   , slices :: Array Int
-  } 
+  }
+
+data Boundary = Source | Target
+derive instance genericBoundary :: Generic Boundary
+instance eqBoundary :: Eq Boundary where eq = gEq
+instance showBoundary :: Show Boundary where
+  show Source = "Source"
+  show Target = "Target"

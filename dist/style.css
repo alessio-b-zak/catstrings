@@ -43,13 +43,14 @@ body {
   overflow-y: auto;
   margin: 0;
   margin-right: 1px;
-  padding-top: 80px;
+  padding-top: 70px;
 }
 
 .sigma {
 	background: #666;
 	border-radius: 10px;
 	padding: 5px;
+	margin: 10px;
 	position: relative;
 }
 
@@ -96,6 +97,10 @@ body {
 	background: #ddd;
 }
 
+.sigma-cell-preview + .sigma-cell-preview {
+	margin-left: 0;
+}
+
 .sigma-cell-body {
 	height: 64px;
 	display: inline-block;
@@ -112,11 +117,53 @@ body {
 
 .diagram {
   flex: 0 1 100%;
-  flex: 0 1 calc(100% - 400px);
+  flex: 0 1 calc(100% - 500px);
   padding: 20px;
 }
 
 .diagram > svg {
 	max-height: 100%;
 	max-width: 100%;
+}
+
+.buttons {
+	flex: 0 1 100px;
+  padding: 0 20px;
+  background-color: #666;
+	position: relative;
+}
+
+.buttons h6 {
+	margin: 5px;
+}
+
+.buttons button {
+	display: block;
+	border: none;
+	border-radius: 0;
+	margin: 20px 0;
+	width: 100%;
+}
+
+.buttons .cache {
+	position: absolute;
+	left: 20px;
+	right: 20px;
+	bottom: 20px;
+	background-color: #ddd;
+}
+
+.cache .clear-cache {
+	position: absolute;
+	top: 0;
+	right: 0;
+	padding: 2px 5px;
+	color: darkred;
+	font-weight: bold;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }

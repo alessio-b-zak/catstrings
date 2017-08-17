@@ -1,17 +1,18 @@
 module Algorithms where
 
 import Prelude
-import Data.Foldable
-import Structures
-import Utilities
-import Data.Tuple
-import Color (black)
-import Control.MonadZero (guard)
-import Data.Maybe
+import Data.Foldable (and)
+import Data.Tuple (Tuple(..))
+import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons)
 import Data.FunctorWithIndex (mapWithIndex)
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Traversable (sequence)
+import Data.Traversable (sequence, find)
+import Control.MonadZero (guard)
+
+import Color (black)
+
+import Utilities
+import Structures
 
 identityDiag :: Diagram -> Diagram
 identityDiag diag = Diagram newDiag
@@ -22,25 +23,53 @@ identityDiag diag = Diagram newDiag
                }
 
 newZeroCell :: Project -> Project
-newZeroCell project =
-    let newZero = { source: Nothing
-                  , target: Nothing
-                  , id: "new 0 cell"
-                  , invertible: false
-                  , name: "new 0 cell"
-                  , singleThumbnail: true
-                  , display: {colour: black, rate: 1}
-                  }
-        addToSignature :: Signature -> Signature
-        addToSignature (Signature s@{cells: (Cells cells), sigma: Nothing}) = 
-           Signature (s { cells = Cells (cells `snoc` newZero), k = s.k + 1 })
-        addToSignature (Signature s@{sigma: Just sigma}) =
-            Signature (s { sigma = Just $ addToSignature sigma })
-     in project { signature = addToSignature project.signature}
+newZeroCell project = fromMaybe project $ addCell Nothing Nothing project
+
+newCell :: Diagram -> Diagram -> Project -> Maybe Project
+newCell source target project = addCell (Just source) (Just target) project
+
+addCell :: Maybe Diagram -> Maybe Diagram -> Project -> Maybe Project
+addCell source target project = do
+  guard case source, target of
+    Just s, Just t -> diagramDimension s == diagramDimension t
+    Nothing, Nothing -> true
+    _, _ -> false
+  let dimension = 1 + maybe (-1) diagramDimension source
+  let
+    addToSignature :: Signature -> Signature
+    addToSignature (Signature s@{sigma: Just sigma})
+      | s.dimension > dimension =
+          Signature (s { sigma = Just $ addToSignature sigma })
+    addToSignature (Signature s@{cells: (Cells cells), id: nextId})
+      | s.dimension < dimension =
+          addToSignature $ Signature
+            { sigma: Just (Signature s)
+            , cells: Cells []
+            , dimension: s.dimension + 1
+            , id: 1
+            }
+      | otherwise =
+          Signature (s { cells = Cells (cells `snoc` cell), id = nextId+1 })
+          where
+            cell =
+              { source
+              , target
+              , id: CellID dimension nextId
+              , invertible: false
+              , name: show dimension <> "-cell " <> show nextId
+              , singleThumbnail: dimension < 1
+              , display: {colour: black, rate: 1}
+              }
+  pure $ project { signature = addToSignature project.signature}
+
+getCell :: Signature -> CellID -> Maybe Cell
+getCell (Signature s) cid@(CellID dim i)
+  | s.dimension == dim = find (\cell -> cell.id == cid) $ getCells s.cells
+  | otherwise = flip getCell cid =<< s.sigma
 
 updateSignature :: (Cell -> Cell) -> Int -> Int -> Signature -> Maybe Signature
 updateSignature f dim i sig
-  | signatureN sig == dim =
+  | signatureDimension sig == dim =
       signatureCellArray' sig <$> modifyAt i f (signatureCellArray sig)
   | otherwise =
       signatureSigma' sig <$> sequence (updateSignature f dim i <$> signatureSigma sig)
@@ -82,14 +111,12 @@ dimensionOfCell {source: Just source} = 1 + diagramDimension source
 liftCell :: Cell -> Diagram
 liftCell cell = Diagram
   { source: cell.source
-  , cells: [{cell: cell, id: cell.id, key: key, box: Nothing}]
+  , cells: [{id: cell.id, key: key, box: Nothing}]
   , dimension: dimension
   }
   where
     dimension = dimensionOfCell cell
     key = replicate (max 0 (dimension-1)) 0
-
-data Boundary = Source | Target
 
 type Coords = Array Int
 
@@ -130,22 +157,22 @@ changeSource newSource baseDiagram@(Diagram record) =
 
 type Height = Int
 
-slice :: Diagram -> Height -> Maybe Diagram
-slice diagram height =
+slice :: Signature -> Diagram -> Height -> Maybe Diagram
+slice signature diagram height =
     let rewrites    = take height $ diagramCells diagram
         applyRewrite :: Maybe Diagram -> DiagramCell -> Maybe Diagram
-        applyRewrite slice diagramCell = do
-            sliceDiagram <- slice
-            let coords      = diagramCell.key
-                cell        = diagramCell.cell
+        applyRewrite thisSlice diagramCell = do
+            sliceDiagram <- thisSlice
+            let coords = diagramCell.key
+            cell <- getCell signature diagramCell.id
             cSource <- cell.source
             cTarget <- cell.target
             rewrite coords sliceDiagram cSource cTarget
     in foldl applyRewrite (diagramSource diagram) rewrites
 
 
-match :: Diagram -> Diagram -> Array (Array Int)
-match baseDiagram matchDiagram
+match :: Signature -> Diagram -> Diagram -> Array (Array Int)
+match signature baseDiagram matchDiagram
   | diagramDimension baseDiagram == 0 =
       do
         -- two zero cells match
@@ -154,12 +181,12 @@ match baseDiagram matchDiagram
         pure []
   | otherwise =
       do
-        Tuple i thisSlice <- mapWithIndex (\num _ -> Tuple num (slice baseDiagram num)) (diagramCells baseDiagram)
+        Tuple i maybeSlice <- mapWithIndex (\num _ -> Tuple num (slice signature baseDiagram num)) (diagramCells baseDiagram)
         -- match _ _ :: [[Int]]
-        submatch <- if (isNothing thisSlice || (isNothing $ diagramSource matchDiagram))
-                      then []
-                      else 
-                        match (fromMaybe emptyDiagram thisSlice) (fromMaybe emptyDiagram $ diagramSource matchDiagram)
+        submatch <- fromMaybe [] do
+          thisSlice <- maybeSlice
+          source <- diagramSource matchDiagram
+          pure $ match signature thisSlice source
         -- submatch :: [Int]
         let coords = i `cons` submatch
         let baseCells  = diagramCells baseDiagram

@@ -1,8 +1,8 @@
 module Utilities where
 
 import Prelude
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Array (filter, last)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Array (filter, last, singleton)
 import Data.Monoid (class Monoid, mempty)
 import Data.String as Str
 import Control.Monad.Eff (Eff)
@@ -34,9 +34,10 @@ lastOrZero xs = fromMaybe 0 $ last xs
 if_ :: forall a . Monoid a => a -> Boolean -> a
 if_ x bool = if bool then x else mempty
 
-foreign import mapWithIndex :: forall a b . (Int -> a -> b) -> Array a -> Array b
-
 foreign import inputValue :: forall eff. Event -> Eff (dom :: DOM | eff) String
 
 colourValue :: forall eff . Event -> Eff (dom :: DOM | eff) (Maybe Color)
 colourValue ev = fromHexString <$> inputValue ev
+
+maybeToArray :: forall a. Maybe a -> Array a
+maybeToArray = maybe [] singleton
