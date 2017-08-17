@@ -1,8 +1,10 @@
 module Structures where
 
 import Prelude
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(Nothing))
+import Data.Foldable
 import Color
+import Data.Array
 
 type Project = 
   { diagram :: Maybe Diagram
@@ -19,11 +21,26 @@ type DiagramCell =
   , key :: Array Int
   , box :: Maybe Box }
 
+eqDiagramCell :: DiagramCell -> DiagramCell -> Boolean
+eqDiagramCell diagramCell1 diagramCell2 =
+    eqCell diagramCell1.cell diagramCell2.cell &&
+    diagramCell1.id == diagramCell2.id &&
+    diagramCell1.key == diagramCell2.key 
+
 data Diagram = Diagram 
   { source :: Maybe Diagram
   , cells :: Array DiagramCell
   , dimension :: Int
   }
+
+instance eqDiagram :: Eq Diagram where
+  eq diagram1 diagram2 = 
+      diagramSource diagram1 == diagramSource diagram2 &&
+      (and $ zipWith eqDiagramCell (diagramCells diagram1) (diagramCells diagram2)) &&
+      diagramDimension diagram1 == diagramDimension diagram2
+
+emptyDiagram :: Diagram
+emptyDiagram = Diagram {source: Nothing, cells: [], dimension: 0}
 
 type ReplacementDiagram =
   { diagram :: Diagram
@@ -85,6 +102,13 @@ type Cell =
   , singleThumbnail :: Boolean
   , display :: Display
   } 
+
+eqCell :: Cell -> Cell -> Boolean
+eqCell cell1 cell2 =
+    cell1.id == cell2.id
+    && cell1.source == cell2.source
+    && cell1.target == cell2.target
+    && cell1.invertible == cell2.invertible
 
 type Box = 
   { boxMin :: Array Int

@@ -1,15 +1,17 @@
 module Algorithms where
 
 import Prelude
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Array (drop, init, length, modifyAt, snoc, zipWith)
-import Data.Traversable (sequence)
-import Control.MonadZero (guard)
-
-import Color (black)
-
-import Utilities
+import Data.Foldable
 import Structures
+import Utilities
+import Data.Tuple
+import Color (black)
+import Control.MonadZero (guard)
+import Data.Maybe
+import Data.Array (drop, init, length, modifyAt, snoc, zipWith, take, foldl, cons)
+import Data.FunctorWithIndex (mapWithIndex)
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Traversable (sequence)
 
 identityDiag :: Diagram -> Diagram
 identityDiag diag = Diagram newDiag
@@ -111,3 +113,48 @@ appendLowerCells baseDiagram@(Diagram record) attachDiagram Target coords = do
 changeSource :: Diagram -> Diagram -> Diagram
 changeSource newSource baseDiagram@(Diagram record) =
     Diagram $ record { source = Just newSource }
+
+type Height = Int
+
+slice :: Diagram -> Height -> Maybe Diagram
+slice diagram height =
+    let rewrites    = take height $ diagramCells diagram
+        applyRewrite :: Maybe Diagram -> DiagramCell -> Maybe Diagram
+        applyRewrite slice diagramCell = do
+            sliceDiagram <- slice
+            let coords      = diagramCell.key
+                cell        = diagramCell.cell
+            cSource <- cell.source
+            cTarget <- cell.target
+            rewrite coords sliceDiagram cSource cTarget
+    in foldl applyRewrite (diagramSource diagram) rewrites
+
+
+match :: Diagram -> Diagram -> Array (Array Int)
+match baseDiagram matchDiagram
+  | diagramDimension baseDiagram == 0 =
+      do
+        -- two zero cells match
+        --if baseDiagram == matchDiagram then [[]] else []
+        guard $ baseDiagram == matchDiagram
+        pure []
+  | otherwise =
+      do
+        Tuple i thisSlice <- mapWithIndex (\num _ -> Tuple num (slice baseDiagram num)) (diagramCells baseDiagram)
+        -- match _ _ :: [[Int]]
+        submatch <- if (isNothing thisSlice || (isNothing $ diagramSource matchDiagram))
+                      then []
+                      else 
+                        match (fromMaybe emptyDiagram thisSlice) (fromMaybe emptyDiagram $ diagramSource matchDiagram)
+        -- submatch :: [Int]
+        let coords = i `cons` submatch
+        let baseCells  = diagramCells baseDiagram
+            matchCells = diagramCells matchDiagram
+        let aboveSlice = drop i baseCells
+        let baseCellsToCheck = take (length matchCells) aboveSlice
+        guard $ and $ zipWith eqDiagramCell (map (alterCellCoords coords) matchCells) baseCellsToCheck
+        
+        -- ensure all rewrites above are same
+        -- guard _
+      
+        pure coords
