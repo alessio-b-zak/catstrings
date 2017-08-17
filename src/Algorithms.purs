@@ -2,7 +2,7 @@ module Algorithms where
 
 import Prelude
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Array (drop, init, length, modifyAt, snoc, zipWith)
+import Data.Array (drop, init, length, modifyAt, snoc, replicate, zipWith)
 import Data.Traversable (sequence)
 import Control.MonadZero (guard)
 
@@ -29,12 +29,12 @@ newZeroCell project =
                   , singleThumbnail: true
                   , display: {colour: black, rate: 1}
                   }
-        updateSignature :: Signature -> Signature
-        updateSignature (Signature s@{cells: (Cells cells), sigma: Nothing}) = 
+        addToSignature :: Signature -> Signature
+        addToSignature (Signature s@{cells: (Cells cells), sigma: Nothing}) = 
            Signature (s { cells = Cells (cells `snoc` newZero), k = s.k + 1 })
-        updateSignature (Signature s@{sigma: Just sigma}) =
-            Signature (s { sigma = Just $ updateSignature sigma })
-     in project { signature = updateSignature project.signature}
+        addToSignature (Signature s@{sigma: Just sigma}) =
+            Signature (s { sigma = Just $ addToSignature sigma })
+     in project { signature = addToSignature project.signature}
 
 updateSignature :: (Cell -> Cell) -> Int -> Int -> Signature -> Maybe Signature
 updateSignature f dim i sig
@@ -72,6 +72,20 @@ alterCoords offset (Diagram record) = Diagram $ record
 alterCellCoords :: Array Int -> DiagramCell -> DiagramCell
 alterCellCoords offset cell =
     cell { key = zipWith (+) offset cell.key }
+
+dimensionOfCell :: Cell -> Int
+dimensionOfCell {source: Nothing} = 0
+dimensionOfCell {source: Just source} = 1 + diagramDimension source
+
+liftCell :: Cell -> Diagram
+liftCell cell = Diagram
+  { source: cell.source
+  , cells: [{cell: cell, id: cell.id, key: key, box: Nothing}]
+  , dimension: dimension
+  }
+  where
+    dimension = dimensionOfCell cell
+    key = replicate (max 0 (dimension-1)) 0
 
 data Boundary = Source | Target
 
