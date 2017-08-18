@@ -1,25 +1,32 @@
 module CatStrings where
 
 import Prelude
-import Data.Maybe (Maybe(..), maybe)
-import Data.Traversable (for_)
+import Data.Maybe (Maybe(..), maybe, fromMaybe)
+import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
-import Data.Array (singleton, mapWithIndex)
+import Data.Array (singleton, mapWithIndex, null, head, mapMaybe)
+import Data.Unfoldable as Unfoldable
 import Control.Monad.Aff (Aff)
+import Control.Monad.Aff.AVar (AVAR)
 
 import DOM (DOM)
+import DOM.HTML (window) as DOM
+import DOM.HTML.Types (htmlDocumentToDocument) as DOM
+import DOM.HTML.Window (document) as DOM
 import DOM.HTML.Indexed.InputType (InputType(InputColor))
 import DOM.Event.Types (Event)
 import Halogen as H
 import Halogen.Aff as HA
+import Halogen.Query.EventSource as ES
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.HTML.CSS (style)
 import Halogen.HTML.SVG as SVG
 import CSS.SVG as SC
-import Color (toHexString)
+import CSS.Size (px)
+import Color (Color, toHexString, rgba)
 
 import Structures
 import Utilities
@@ -28,23 +35,27 @@ import Algorithms
 type State = Project
 
 data Query a
-  = NewZero a
+  = Init a
+  | NewZero a
   | UpdateCellColour Int Int Event a
   | UpdateCellName Int Int Event a
   | AttachCell Cell a
   | SetCache Boundary a
   | Identity a
   | ClearCache a
+  | HandleKey Event (ES.SubscribeStatus -> a)
   | ClearDiagram a
 
 data Message
 
-csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (dom :: DOM | eff))
+csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (avar :: AVAR, dom :: DOM | eff))
 csApp =
-  H.component
+  H.lifecycleComponent
     { initialState: const initial
     , render
     , eval
+    , initializer: Just (H.action Init)
+    , finalizer: Nothing
     , receiver: const Nothing
     }
   where
@@ -65,10 +76,15 @@ csApp =
     , selectedCell: Nothing
     }
   
-  eval :: Query ~> H.ComponentDSL State Query Message (Aff (dom :: DOM | eff))
+  eval :: Query ~> H.ComponentDSL State Query Message (Aff (avar :: AVAR, dom :: DOM | eff))
   eval = case _ of
+    Init reply -> do
+      document <- H.liftEff $ DOM.document =<< DOM.window
+      H.subscribe $
+        ES.eventSource' (onKeyPress document) (Just <<< H.request <<< HandleKey)
+      pure reply
     NewZero reply -> do
-      H.put =<< newZeroCell <$> H.get
+      H.modify newZeroCell
       pure reply
     UpdateCellColour dimension i ev reply -> do
       mColour <- H.liftEff $ colourValue ev
@@ -129,6 +145,15 @@ csApp =
       project <- H.get
       H.put $ project { diagram = Nothing }
       pure reply
+    HandleKey event reply -> do
+      H.liftEff (eventKey event) >>= case _ of
+        Just char
+          | char == 's' -> eval (SetCache Source unit)
+          | char == 't' -> eval (SetCache Target unit)
+          | char == 'i' -> eval (Identity unit)
+          | char == 'c' -> eval (ClearDiagram unit)
+        _ -> pure unit
+      pure $ reply H.Listening
 
 render :: State -> H.ComponentHTML Query
 render project =
@@ -224,21 +249,59 @@ renderCell signature cell =
   renderDiagram signature $ liftCell cell
 
 renderDiagram :: Signature -> Diagram -> H.ComponentHTML Query
-renderDiagram signature (Diagram {source:Nothing,cells:[cell], dimension}) =
+renderDiagram signature (Diagram {source:Nothing,cells:[dCell], dimension}) =
   SVG.svg [SVG.viewBox 0 0 100 100] $
-    case getCell signature cell.id of
-      Just cell ->
-        [ SVG.circle
-          [ SVG.cx 50
-          , SVG.cy 50
-          , SVG.r 15
-          , style $ SC.fill cell.display.colour
-          ]
-        ]
-      Nothing -> []
-renderDiagram signature (Diagram {source:Just source,cells,dimension}) =
-  blankDiagram
+    case getCell signature dCell.id of
+      Just cell -> [ dot 50 50 cell.display.colour ]
+      Nothing   -> []
+
+renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
+  | dimension == 1 = renderLineDiagram signature d
 renderDiagram signature _ = blankDiagram
+
+renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) =
+  SVG.svg [SVG.viewBox 0 0 100 100]
+    [ straightLine 0 50 100 50 colour ]
+  where colour = maybeColour $ head $ getColours signature source
+renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension}) =
+  SVG.svg [SVG.viewBox 0 0 100 100] $
+    cells >>= \(Tuple i cell) ->
+      [ straightLine (i*100) 50 (i*100+50) 50 (sourceColour cell)
+      , straightLine (i*100+50) 50 (i*100+100) 50  (targetColour cell)
+      , dot 50 50 (cellColour cell)
+      ]
+  where
+    cells :: Array (Tuple Int Cell)
+    cells = mapMaybe sequence $ map (getCell signature <<< dCellID) <$> zipIndex dCells
+    sourceColour cell = maybeColour $ head <<< getColours signature =<< cell.source
+    targetColour cell = maybeColour $ head <<< getColours signature =<< cell.target
+renderLineDiagram signature _ = blankDiagram
+
+getColours :: Signature -> Diagram -> Array Color
+getColours signature diagram =
+  maybeColour <<< map cellColour <<< getCell signature <<< dCellID <$> diagramCells diagram
+
+straightLine :: Int -> Int -> Int -> Int -> Color -> H.ComponentHTML Query
+straightLine x0 y0 x1 y1 =
+  line ("M" <> show x0 <> "," <> show y0 <> "L" <> show x1 <> "," <> show y1)
+
+line :: String -> Color -> H.ComponentHTML Query
+line d colour =
+  SVG.path
+    [ SVG.d d
+    , style do
+        SC.stroke colour
+        SC.strokeWidth (px 10.0)
+    ]
+
+dot :: Int -> Int -> Color -> H.ComponentHTML Query
+dot x y colour =
+  SVG.circle
+    [ SVG.cx x
+    , SVG.cy y
+    , SVG.r 10
+    , style $ SC.fill colour
+    ]
 
 blankDiagram :: H.ComponentHTML Query
 blankDiagram = SVG.svg [SVG.viewBox 0 0 0 0] []

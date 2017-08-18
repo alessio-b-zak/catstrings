@@ -97,8 +97,8 @@ y1 n = attr (AttrName "y1") (show n)
 y2 :: forall r i. Int -> IProp (y2 :: Attr | r) i
 y2 n = attr (AttrName "y2") (show n)
 
-d :: forall r i. Int -> IProp (d :: Attr | r) i
-d n = attr (AttrName "d") (show n)
+d :: forall r i. String -> IProp (d :: Attr | r) i
+d p = attr (AttrName "d") p
 
 points :: forall r i. Array (Tuple Int Int) -> IProp (points :: String | r) i
 points n = attr  (AttrName "points")

@@ -31,6 +31,9 @@ eqDiagramCell diagramCell1 diagramCell2 =
     diagramCell1.id == diagramCell2.id &&
     diagramCell1.key == diagramCell2.key 
 
+dCellID :: DiagramCell -> CellID
+dCellID dCell = dCell.id
+
 data Diagram = Diagram 
   { source :: Maybe Diagram
   , cells :: Array DiagramCell
@@ -60,7 +63,7 @@ diagramCells (Diagram { cells }) = cells
 diagramDimension :: Diagram -> Int
 diagramDimension (Diagram { dimension }) = dimension
 
-data Signature  = Signature 
+data Signature = Signature 
   { cells :: Cells     -- Cells of the signature
   , sigma :: Maybe Signature -- Based on this signature
   , dimension :: Int -- Dimension of the signature
@@ -99,7 +102,7 @@ type Cell =
   , name :: String
   , singleThumbnail :: Boolean
   , display :: Display
-  } 
+  }
 
 eqCell :: Cell -> Cell -> Boolean
 eqCell cell1 cell2 =
@@ -107,6 +110,12 @@ eqCell cell1 cell2 =
     && cell1.source == cell2.source
     && cell1.target == cell2.target
     && cell1.invertible == cell2.invertible
+
+cellID :: Cell -> CellID
+cellID cell = cell.id
+
+cellColour :: Cell -> Color
+cellColour cell = cell.display.colour
 
 type Box = 
   { boxMin :: Array Int

@@ -15,3 +15,14 @@ exports.inputValue = function(event) {
     return event.target.value;
   };
 };
+
+exports._eventKey = function (Just) {
+  return function (Nothing) {
+    return function (event) {
+      return function () {
+        if (event && event.charCode) return Just(event.charCode);
+        else return Nothing;
+      };
+    };
+  };
+};

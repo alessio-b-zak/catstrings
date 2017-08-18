@@ -4,12 +4,13 @@ import Prelude
 import Data.Foldable (and)
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
-import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons)
+import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons, (!!))
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Control.MonadZero (guard)
 
-import Color (black)
+import Color (Color, black, white)
+import Color.Scheme.X11
 
 import Utilities
 import Structures
@@ -57,10 +58,20 @@ addCell source target project = do
               , id: CellID dimension nextId
               , invertible: false
               , name: show dimension <> "-cell " <> show nextId
-              , singleThumbnail: dimension < 1
-              , display: {colour: black, rate: 1}
+              , singleThumbnail: dimension < 2
+              , display: {colour: pickColour dimension nextId, rate: 1}
               }
   pure $ project { signature = addToSignature project.signature}
+
+pickColour :: Int -> Int -> Color
+pickColour dimension nextId =
+  maybeColour $ (_ !! nextId `mod` 3) =<< colours !! dimension `mod` 3
+  where
+    colours = 
+      [ [ red, orange, yellow ]
+      , [ green, blue, purple ]
+      , [ black, white, gray ]
+      ]
 
 getCell :: Signature -> CellID -> Maybe Cell
 getCell (Signature s) cid@(CellID dim i)
