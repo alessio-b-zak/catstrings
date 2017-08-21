@@ -259,6 +259,7 @@ renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
   | dimension == 1 = renderLineDiagram signature d
 renderDiagram signature _ = blankDiagram
 
+renderLineDiagram :: Signature -> Diagram -> H.ComponentHTML Query
 renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) =
   SVG.svg [SVG.viewBox 0 0 100 100]
     [ straightLine 0 50 100 50 colour ]
