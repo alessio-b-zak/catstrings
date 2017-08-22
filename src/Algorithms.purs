@@ -4,16 +4,28 @@ import Prelude
 import Data.Foldable (and)
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
-import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons, (!!))
+import Color (black)
+import Control.MonadZero (guard)
+import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons, range, zip, last, head, (!!), (..))
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Control.MonadZero (guard)
-
 import Color (Color, black, white)
 import Color.Scheme.X11
-
 import Utilities
 import Structures
+
+getNumInputs :: Signature -> DiagramCell -> Maybe Int
+getNumInputs signature diagramCell = do
+    cell <- (getCell signature diagramCell.id)
+    source <- cell.source
+    pure $ length $ diagramCells source
+  
+getNumOutputs :: Signature -> DiagramCell -> Maybe Int
+getNumOutputs signature diagramCell = do
+    cell <- (getCell signature diagramCell.id)
+    target <- cell.target
+    pure $ length $ diagramCells target
 
 identityDiag :: Diagram -> Diagram
 identityDiag diag = Diagram newDiag
@@ -181,6 +193,12 @@ slice signature diagram height =
             rewrite coords sliceDiagram cSource cTarget
     in foldl applyRewrite (diagramSource diagram) rewrites
 
+getSlices :: Diagram -> Maybe (Array Diagram)
+getSlices diagram =
+    let sliceNum = length $ diagramCells diagram
+        sliceHeight = range 0 $ sliceNum
+        diagramList = replicate (sliceNum+ 1) diagram
+     in sequence $ zipWith slice diagramList sliceHeight 
 
 match :: Signature -> Diagram -> Diagram -> Array (Array Int)
 match signature baseDiagram matchDiagram
@@ -210,3 +228,65 @@ match signature baseDiagram matchDiagram
         -- guard _
       
         pure coords
+
+type GraphicalSlice =
+  { cells :: Array Cell
+  , rewrite :: Maybe { rewriteCell :: Cell, rewriteCoord :: Int }
+  , cellPositions :: Array Int
+  }
+
+--takes a list of slices and a list of rewrites and constructs a graphical diagram
+coreLoop :: Array Diagram -> Array DiagramCell -> Array GraphicalSlice
+coreLoop diagrams dCells =
+    foldl initialPassover [] $ zip diagrams (cons Nothing (Just <$> dCells))
+
+--takes a slice and a rewrite and makes a graphical slice.
+fixOffsets :: Array GraphicalSlice -> Tuple Diagram (Maybe DiagramCell) -> GraphicalSlice
+fixOffsets graphicalSlices (Tuple diagram Nothing) = 
+    { cells: map (\dCell -> dCell.cell) $ diagramCells diagram
+    , rewrite: Nothing 
+    , cellPositions: map (2 * _) $ range 0 (length (diagramCells diagram) -  1) 
+    }
+fixOffsets graphicalSlices (Tuple diagram (Just diagramCell)) =
+    let gCells = map (\dCell -> dCell.cell) $ diagramCells diagram
+        newCellPositions = calculateCellPositions graphicalSlices diagram diagramCell 
+     in { cells: gCells, rewrite: diagramCell.cell, cellPositions: newCellPositions }
+
+--Black Magic from Charlie's warped brain
+-- Calculates cell positions for more outputs than inputs
+calculateCellPositions :: GraphicalSlice -> Diagram -> DiagramCell -> Maybe (Array Int)
+calculateCellPositions graphicalSlice diagram dCell = do
+    changePoint <- last dCell.key --Changeover point
+    graphicalSliceSplit <- splitAt changePoint graphicalSlice.cellPositions --prerewrite
+    inputCount <- getNumInputs dCell
+    dCellSplit <- splitAt length graphicalSliceSplit.after
+    let leftBound = fromMaybe (-1 ) $ last graphicalSliceSplit.before 
+    let rightBound = fromMaybe 1 $ head dCellSplit.after
+    let centre = (fromMaybe 1 $ head dCellSplit.before) + (inputCount - 1)
+    outputCount <- getNumOutputs dCell
+    let leftOutput = centre - outputCount + 1
+    let tempOutputs = map (\wire -> leftOutput + 2 * wire) 0..(outputCount-1)
+    let leftShift = max 0 $ leftBound - leftOutput + 2
+    let outputs = map (leftShift + _) tempOutputs
+    let rightShift = leftShift + max 0 $ leftOutput + 2*outputCount - rightBound
+    let rightWires = map (rightShift + _) dCellSplit.after
+    pure $ Tuple centre $ graphicalSliceSplit.before <> outputs <> rightWires
+     
+--how many more output wires than input wires on diagramcell
+diagramWireDiff :: DiagramCell -> Int
+diagramWireDiff diagramCell = getNumOutputs diagramCell - getNumInputs diagramCell 
+
+fixGraphics :: Array GraphicalSlice -> GraphicalSlice -> Array GraphicalSlice 
+fixGraphics = ?hole1
+
+initialPassover :: Array GraphicalSlice -> Tuple Diagram (Maybe DiagramCell) -> Array GraphicalSlice
+initialPassover graphic newSlice =
+    let fixedOffsets = fixOffsets newSlice graphic
+        fixedGraphics = fixGraphics fixedOffsets graphic
+     in fixedGraphics <> fixedOffsets
+
+--transforms diagram into a graphical representation
+transformGraphical :: Diagram -> Maybe (Array GraphicalSlice)
+transformGraphical diagram = do
+    sliceList <- getSlices diagram
+    pure $ coreLoop sliceList (diagramCells diagram)

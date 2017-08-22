@@ -4,9 +4,9 @@ import Prelude
 import Data.Maybe (Maybe(Nothing))
 import Data.Tuple (Tuple(..))
 import Data.Foldable
-import Data.Array
 import Data.Generic (class Generic, gShow, gEq)
 import Color
+import Data.Array(length, zipWith)
 
 data CellID = CellID Int Int
 derive instance eqCellID :: Eq CellID
@@ -25,6 +25,7 @@ type DiagramCell =
   , key :: Array Int
   , box :: Maybe Box
   }
+
 
 eqDiagramCell :: DiagramCell -> DiagramCell -> Boolean
 eqDiagramCell diagramCell1 diagramCell2 =
