@@ -67,10 +67,10 @@ pickColour :: Int -> Int -> Color
 pickColour dimension nextId =
   maybeColour $ (_ !! nextId `mod` 3) =<< colours !! dimension `mod` 3
   where
-    colours = 
-      [ [ red, orange, yellow ]
-      , [ green, blue, purple ]
-      , [ black, white, gray ]
+    colours =
+      [ [ red, green, black ]
+      , [ orange, blue, white ]
+      , [ yellow, purple, gray ]
       ]
 
 getCell :: Signature -> CellID -> Maybe Cell
