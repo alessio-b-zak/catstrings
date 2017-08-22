@@ -26,3 +26,5 @@ exports._eventKey = function (Just) {
     };
   };
 };
+
+exports.infinity = Infinity;

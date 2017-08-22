@@ -81,3 +81,5 @@ maybeColour = fromMaybe transparent
 
 transparent :: Color
 transparent = rgba 0 0 0 0.0
+
+foreign import infinity :: Int
