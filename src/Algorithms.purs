@@ -242,7 +242,7 @@ type GraphicalSlice =
 drawDiagram :: Signature -> Diagram -> Maybe (Array GraphicalSlice)
 drawDiagram signature diagram = do
     sliceList <- getSlices signature diagram
-    foldl (addGraphicalSlice signature) (pure []) $ zip slices (Nothing `cons` (Just <$> diagramCells diagram))
+    foldl (addGraphicalSlice signature) (pure []) $ zip sliceList (Nothing `cons` (Just <$> diagramCells diagram))
 
 addGraphicalSlice :: Signature -> Maybe (Array GraphicalSlice) -> Tuple Diagram (Maybe DiagramCell) -> Maybe (Array GraphicalSlice)
 addGraphicalSlice signature _ (Tuple slices Nothing) = do
@@ -274,6 +274,9 @@ spaceWires = map (\x -> 2*x + 1)
 spaceNWiresFrom :: Int -> Int -> Array Int
 spaceNWiresFrom a n = spaceWires (a .. (a+n-1))
 
+spaceNWires :: Int -> Array Int
+spaceNWires = spaceNWiresFrom 0
+
 -- Black Magic from Charlie's warped brain
 calculateCellPositions :: Signature -> GraphicalSlice -> Diagram -> DiagramCell -> Maybe {shifts :: Shifts, centre :: Int, positions :: Array Int}
 calculateCellPositions signature graphicalSlice diagram dCell = do
@@ -282,12 +285,12 @@ calculateCellPositions signature graphicalSlice diagram dCell = do
     outputCount <- getNumOutputs signature dCell
     let {left, mid, right} = splitInThree key inputCount graphicalSlice.cellPositions
     let leftBound = wiresRightBound 0 left
-    let centre = leftBound + inputCount
-    let leftBound' = centre - outputCount
+    let centre = leftBound + (min 1 inputCount)
+    let leftBound' = centre - (min 1 outputCount)
     let leftShift = max 0 $ leftBound - leftBound'
     let outputs = spaceNWiresFrom (leftBound' + leftShift) outputCount
     let rightBound = wiresLeftBound infinity right
-    let rightShift = leftShift + max 0 (leftBound + 2*outputCount - rightBound)
+    let rightShift = leftShift + max 0 (leftBound + 2*(min 1 outputCount) - rightBound)
     let rightWires = map (rightShift + _) right
     let positions = left <> outputs <> rightWires
     pure $ {shifts: {leftBound, leftShift, rightBound, rightShift}, centre, positions}
