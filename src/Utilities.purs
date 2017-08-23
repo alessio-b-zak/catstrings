@@ -2,7 +2,7 @@ module Utilities where
 
 import Prelude
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Array (filter, last, singleton, mapWithIndex)
+import Data.Array (filter, last, singleton, mapWithIndex, slice, take, drop, takeWhile, dropWhile)
 import Data.Monoid (class Monoid, mempty)
 import Data.String as Str
 import Data.Char (fromCharCode)
@@ -83,3 +83,18 @@ transparent :: Color
 transparent = rgba 0 0 0 0.0
 
 foreign import infinity :: Int
+
+splitInThree :: forall a. Int -> Int -> Array a -> {left :: Array a, mid :: Array a, right :: Array a}
+splitInThree lsize msize arr =
+  { left: take lsize arr
+  , mid: slice lsize (lsize + msize) arr
+  , right: drop (lsize + msize) arr
+  }
+
+splitInThreeBy :: forall a. (a -> Boolean) -> (a -> Boolean) -> Array a -> {left :: Array a, mid :: Array a, right :: Array a}
+splitInThreeBy f g arr =
+  { left: takeWhile f arr
+  , mid: takeWhile g (dropWhile f arr)
+  , right: dropWhile g (dropWhile f arr)
+  }
+

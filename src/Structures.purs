@@ -30,10 +30,7 @@ type DiagramCell =
 eqDiagramCell :: DiagramCell -> DiagramCell -> Boolean
 eqDiagramCell diagramCell1 diagramCell2 =
     diagramCell1.id == diagramCell2.id &&
-    diagramCell1.key == diagramCell2.key 
-
-dCellID :: DiagramCell -> CellID
-dCellID dCell = dCell.id
+    diagramCell1.key == diagramCell2.key
 
 data Diagram = Diagram 
   { source :: Maybe Diagram

@@ -4,8 +4,8 @@ import Prelude
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
-import Data.Tuple (Tuple(..))
-import Data.Array (singleton, mapWithIndex, null, head, mapMaybe)
+import Data.Tuple (Tuple(..), snd)
+import Data.Array (singleton, mapWithIndex, null, head, mapMaybe, length, zip, cons, snoc)
 import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.AVar (AVAR)
 
@@ -255,7 +255,48 @@ renderDiagram signature (Diagram {source:Nothing,cells:[dCell], dimension}) =
 
 renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
   | dimension == 1 = renderLineDiagram signature d
+  | otherwise      = render2DDiagram signature d
 renderDiagram signature _ = blankDiagram
+
+render2DDiagram :: Signature -> Diagram -> H.ComponentHTML Query
+render2DDiagram signature diagram = fromMaybe blankDiagram $ do
+  g@(GraphicalSlices source slices) <- drawDiagram signature diagram 
+  let width = graphicalSlicesWidth g
+  let height = length slices
+  let sourceContd = SVG.g [] $ zip source.cells source.cellPositions <#>
+        \(Tuple cell pos) ->
+          line (pos * 10) (-100) (pos * 10) 0 cell.display.colour
+  let central = do
+        Tuple h (Tuple preSlice gSlice) <- zipIndex (slicePairs g)
+        let before = zipIndex (zip preSlice.cells preSlice.cellPositions) <#>
+              \(Tuple i (Tuple cell pos)) ->
+                let y0 = h * 10
+                    y1 = y0 + 5
+                    x0 = pos * 10
+                    x1 = if gSlice.rewriteKey <= i && i < gSlice.rewriteKey + gSlice.rewriteInputs
+                          then gSlice.rewriteCoord * 10
+                          else pos * 10
+                in line x0 y0 x1 y1 cell.display.colour
+        let after = zipIndex (zip gSlice.cells gSlice.cellPositions) <#>
+              \(Tuple i (Tuple cell pos)) ->
+                let y0 = h * 10 + 5
+                    y1 = y0 + 5
+                    x0 = if gSlice.rewriteKey <= i && i < gSlice.rewriteKey + gSlice.rewriteOutputs
+                          then gSlice.rewriteCoord * 10
+                          else pos * 10
+                    x1 = pos * 10
+                in line x0 y0 x1 y1 cell.display.colour
+        before <> after `snoc` dot (gSlice.rewriteCoord * 10) (h * 10 + 5) (gSlice.rewriteCell.display.colour)
+  let target = topSlice g
+  let targetContd = SVG.g [] $
+    zip target.cells target.cellPositions <#>
+      \(Tuple cell pos) ->
+        let y0 = height * 10
+            y1 = y0 + 100
+            x = pos * 10
+        in line x y0 x y1 cell.display.colour
+  pure $ SVG.svg [SVG.viewBox 0 0 (10*width) (10*(max 1 height))] $
+    sourceContd `cons` central `snoc` targetContd
 
 renderLineDiagram :: Signature -> Diagram -> H.ComponentHTML Query
 renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) =
