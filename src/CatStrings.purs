@@ -6,7 +6,6 @@ import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
 import Data.Array (singleton, mapWithIndex, null, head, mapMaybe)
-import Data.Unfoldable as Unfoldable
 import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.AVar (AVAR)
 
@@ -17,7 +16,6 @@ import DOM.HTML.Window (document) as DOM
 import DOM.HTML.Indexed.InputType (InputType(InputColor))
 import DOM.Event.Types (Event)
 import Halogen as H
-import Halogen.Aff as HA
 import Halogen.Query.EventSource as ES
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -250,9 +248,9 @@ renderCell signature cell =
 
 renderDiagram :: Signature -> Diagram -> H.ComponentHTML Query
 renderDiagram signature (Diagram {source:Nothing,cells:[dCell], dimension}) =
-  SVG.svg [SVG.viewBox 0 0 100 100] $
+  SVG.svg [SVG.viewBox 0 0 10 10] $
     case getCell signature dCell.id of
-      Just cell -> [ dot 50 50 cell.display.colour ]
+      Just cell -> [ dot 5 5 cell.display.colour ]
       Nothing   -> []
 
 renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
@@ -261,38 +259,39 @@ renderDiagram signature _ = blankDiagram
 
 renderLineDiagram :: Signature -> Diagram -> H.ComponentHTML Query
 renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) =
-  SVG.svg [SVG.viewBox 0 0 100 100]
-    [ straightLine 0 50 100 50 colour ]
+  SVG.svg [SVG.viewBox 0 0 10 10]
+    [ line 0 5 10 5 colour ]
   where colour = maybeColour $ head $ getColours signature source
 renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension}) =
-  SVG.svg [SVG.viewBox 0 0 100 100] $
+  SVG.svg [SVG.viewBox 0 0 10 10] $
     cells >>= \(Tuple i cell) ->
-      [ straightLine (i*100) 50 (i*100+50) 50 (sourceColour cell)
-      , straightLine (i*100+50) 50 (i*100+100) 50  (targetColour cell)
-      , dot 50 50 (cellColour cell)
+      [ line (i*10) 5 (i*10+5) 5 (sourceColour cell)
+      , line (i*10+5) 5 (i*10+10) 5  (targetColour cell)
+      , dot 5 5 (cellColour cell)
       ]
   where
     cells :: Array (Tuple Int Cell)
-    cells = mapMaybe sequence $ map (getCell signature <<< dCellID) <$> zipIndex dCells
+    cells = mapMaybe sequence $ map (getCell signature <<< _.id) <$> zipIndex dCells
     sourceColour cell = maybeColour $ head <<< getColours signature =<< cell.source
     targetColour cell = maybeColour $ head <<< getColours signature =<< cell.target
 renderLineDiagram signature _ = blankDiagram
 
 getColours :: Signature -> Diagram -> Array Color
 getColours signature diagram =
-  maybeColour <<< map cellColour <<< getCell signature <<< dCellID <$> diagramCells diagram
+  maybeColour <$> map cellColour <$> getCell signature <$> _.id <$> diagramCells diagram
 
-straightLine :: Int -> Int -> Int -> Int -> Color -> H.ComponentHTML Query
-straightLine x0 y0 x1 y1 =
-  line ("M" <> show x0 <> "," <> show y0 <> "L" <> show x1 <> "," <> show y1)
+line :: Int -> Int -> Int -> Int -> Color -> H.ComponentHTML Query
+line x0 y0 x1 y1
+  | x0 == x1  = svgLine ("M" <> show x0 <> "," <> show y0 <> "L" <> show x1 <> "," <> show y1)
+  | otherwise = svgLine ("M" <> show x0 <> "," <> show y0 <> "L" <> show x1 <> "," <> show y1)
 
-line :: String -> Color -> H.ComponentHTML Query
-line d colour =
+svgLine :: String -> Color -> H.ComponentHTML Query
+svgLine d colour =
   SVG.path
     [ SVG.d d
     , style do
         SC.stroke colour
-        SC.strokeWidth (px 10.0)
+        SC.strokeWidth (px 1.0)
     ]
 
 dot :: Int -> Int -> Color -> H.ComponentHTML Query
@@ -300,7 +299,7 @@ dot x y colour =
   SVG.circle
     [ SVG.cx x
     , SVG.cy y
-    , SVG.r 10
+    , SVG.r 1
     , style $ SC.fill colour
     ]
 

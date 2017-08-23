@@ -4,13 +4,11 @@ import Prelude
 import Data.Foldable (and)
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
-import Color (black)
 import Control.MonadZero (guard)
 import Data.Array (drop, init, length, modifyAt, snoc, zipWith, replicate, take, foldl, cons, range, zip, last, head, (!!), (..))
 import Data.Array (slice) as Array
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
-import Control.MonadZero (guard)
 import Color (Color, black, white)
 import Color.Scheme.X11
 import Utilities
@@ -197,9 +195,8 @@ applyRewrite signature thisSlice diagramCell = do
 getSlices :: Signature -> Diagram -> Maybe (Array Diagram)
 getSlices signature diagram =
     let sliceNum = length $ diagramCells diagram
-        sliceHeight = range 0 $ sliceNum
-        diagramList = replicate (sliceNum+ 1) diagram
-     in sequence $ zipWith (slice signature) diagramList sliceHeight 
+        sliceHeights = range 0 sliceNum
+     in sequence $ map (slice signature diagram) sliceHeights
 
 match :: Signature -> Diagram -> Diagram -> Array (Array Int)
 match signature baseDiagram matchDiagram
