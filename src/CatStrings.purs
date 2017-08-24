@@ -5,7 +5,7 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..), snd)
-import Data.Array (singleton, mapWithIndex, null, head, mapMaybe, length, zip, cons, snoc)
+import Data.Array (singleton, mapWithIndex, null, head, mapMaybe, length, zip, cons, snoc, concat)
 import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.AVar (AVAR)
 
@@ -63,7 +63,7 @@ csApp =
     newZeroCell $
     { diagram: Nothing
     , signature: Signature 
-      { cells: Cells []
+      { cells: []
       , sigma: Nothing
       , dimension: 0
       , id: 1
@@ -89,16 +89,16 @@ csApp =
       for_ mColour $ \colour -> do
         project <- H.get
         let f cell = cell {display = cell.display {colour = colour}}
-        let mSignature' = updateSignature f dimension i project.signature
-        for_ mSignature' $ \signature' -> H.put (project {signature = signature'})
+        let signature' = updateSignature f dimension i project.signature
+        H.put (project {signature = signature'})
       pure reply
     UpdateCellName dimension i ev reply -> do
       name <- H.liftEff $ inputValue ev
       unless (Str.null name) do
         project <- H.get
         let f cell = cell {name = name}
-        let mSignature' = updateSignature f dimension i project.signature
-        for_ mSignature' $ \signature' -> H.put (project {signature = signature'})
+        let signature' = updateSignature f dimension i project.signature
+        H.put (project {signature = signature'})
       pure reply
     AttachCell cell reply -> do
       project <- H.get
@@ -189,12 +189,12 @@ renderSignature signature =
     ]
 
 renderSigma :: Signature -> Array (H.ComponentHTML Query)
-renderSigma signature =
-  maybe [] renderSigma sigma <> 
+renderSigma signature@(Signature s) =
+  maybe [] renderSigma s.sigma <> 
   [ HH.div [classes ["sigma"]] $
-    [ HH.h2_ [ HH.text (show dimension <> "-cells") ]
+    [ HH.h2_ [ HH.text (show s.dimension <> "-cells") ]
     , HH.div [classes ["cells"]] $
-      mapWithIndex (renderSigmaCell signature dimension) cellArray
+      mapWithIndex (renderSigmaCell signature s.dimension) s.cells
     ] <>
     [ HH.div
         [ classes ["newcell"]
@@ -203,10 +203,6 @@ renderSigma signature =
       [ HH.text "New zerocell" ]
     ] `if_` (signatureDimension signature == 0)
   ]
-  where
-    cellArray = signatureCellArray signature
-    dimension = signatureDimension signature
-    sigma = signatureSigma signature
 
 renderSigmaCell :: Signature -> Int -> Int -> Cell -> H.ComponentHTML Query
 renderSigmaCell signature dimension i cell =
@@ -248,18 +244,16 @@ renderCell signature cell =
 
 renderDiagram :: Signature -> Diagram -> H.ComponentHTML Query
 renderDiagram signature (Diagram {source:Nothing,cells:[dCell], dimension}) =
-  SVG.svg [SVG.viewBox 0 0 10 10] $
-    case getCell signature dCell.id of
-      Just cell -> [ dot 5 5 cell.display.colour ]
-      Nothing   -> []
+  fromMaybe blankDiagram $ fromError $ getCell signature dCell.id <#>
+    \cell -> SVG.svg [SVG.viewBox 0 0 10 10] [ dot 5 5 cell.display.colour ]
 
 renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
-  | dimension == 1 = renderLineDiagram signature d
-  | otherwise      = render2DDiagram signature d
+  | dimension == 1 = fromMaybe blankDiagram $ fromError $ renderLineDiagram signature d
+  | otherwise      = fromMaybe blankDiagram $ fromError $ render2DDiagram signature d
 renderDiagram signature _ = blankDiagram
 
-render2DDiagram :: Signature -> Diagram -> H.ComponentHTML Query
-render2DDiagram signature diagram = fromMaybe blankDiagram $ do
+render2DDiagram :: Signature -> Diagram -> OrError (H.ComponentHTML Query)
+render2DDiagram signature diagram = do
   g@(GraphicalSlices source slices) <- drawDiagram signature diagram 
   let width = graphicalSlicesWidth g
   let height = length slices
@@ -298,28 +292,31 @@ render2DDiagram signature diagram = fromMaybe blankDiagram $ do
   pure $ SVG.svg [SVG.viewBox 0 0 (10*width) (10*(max 1 height))] $
     sourceContd `cons` central `snoc` targetContd
 
-renderLineDiagram :: Signature -> Diagram -> H.ComponentHTML Query
-renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) =
-  SVG.svg [SVG.viewBox 0 0 10 10]
-    [ line 0 5 10 5 colour ]
-  where colour = maybeColour $ head $ getColours signature source
-renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension}) =
-  SVG.svg [SVG.viewBox 0 0 10 10] $
-    cells >>= \(Tuple i cell) ->
-      [ line (i*10) 5 (i*10+5) 5 (sourceColour cell)
-      , line (i*10+5) 5 (i*10+10) 5  (targetColour cell)
+renderLineDiagram :: Signature -> Diagram -> OrError (H.ComponentHTML Query)
+renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) = do
+  colour <- orError NoSource <<< head =<< getColours signature source
+  pure $ SVG.svg [SVG.viewBox 0 0 10 10]
+          [ line 0 5 10 5 colour ]
+renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension}) = do
+  -- cells :: OrError [(Int, Cell)]
+  cells <- sequence $ sequence <$> map (getCell signature <<< _.id) <$> zipIndex dCells
+  lines <- map concat <$> sequence $ cells <#> \(Tuple i cell) -> do
+    sourceColour <- onlyColour =<< orError NoSource cell.source
+    targetColour <- onlyColour =<< orError NoTarget cell.target
+    pure
+      [ line (i*10) 5 (i*10+5) 5 sourceColour
+      , line (i*10+5) 5 (i*10+10) 5 targetColour
       , dot 5 5 (cellColour cell)
       ]
+  
+  pure $ SVG.svg [SVG.viewBox 0 0 10 10] lines
   where
-    cells :: Array (Tuple Int Cell)
-    cells = mapMaybe sequence $ map (getCell signature <<< _.id) <$> zipIndex dCells
-    sourceColour cell = maybeColour $ head <<< getColours signature =<< cell.source
-    targetColour cell = maybeColour $ head <<< getColours signature =<< cell.target
-renderLineDiagram signature _ = blankDiagram
+    onlyColour diagram = orError NoSource <<< head =<< getColours signature diagram
+renderLineDiagram signature _ = pure blankDiagram
 
-getColours :: Signature -> Diagram -> Array Color
+getColours :: Signature -> Diagram -> OrError (Array Color)
 getColours signature diagram =
-  maybeColour <$> map cellColour <$> getCell signature <$> _.id <$> diagramCells diagram
+  sequence $ map cellColour <$> getCell signature <$> _.id <$> diagramCells diagram
 
 line :: Int -> Int -> Int -> Int -> Color -> H.ComponentHTML Query
 line x0 y0 x1 y1

@@ -1,8 +1,9 @@
 module Structures where
 
 import Prelude
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
+import Data.Either (Either(..))
 import Data.Foldable
 import Data.Generic (class Generic, gShow, gEq)
 import Color
@@ -25,7 +26,6 @@ type DiagramCell =
   , key :: Array Int
   , box :: Maybe Box
   }
-
 
 eqDiagramCell :: DiagramCell -> DiagramCell -> Boolean
 eqDiagramCell diagramCell1 diagramCell2 =
@@ -62,23 +62,17 @@ diagramDimension :: Diagram -> Int
 diagramDimension (Diagram { dimension }) = dimension
 
 data Signature = Signature 
-  { cells :: Cells     -- Cells of the signature
+  { cells :: Array Cell -- Cells of the signature
   , sigma :: Maybe Signature -- Based on this signature
   , dimension :: Int -- Dimension of the signature
   , id :: Int -- Next id to use
   }
 
-signatureCells :: Signature -> Cells
+signatureCells :: Signature -> Array Cell
 signatureCells (Signature s) = s.cells
 
-signatureCells' :: Signature -> Cells -> Signature
+signatureCells' :: Signature -> Array Cell -> Signature
 signatureCells' (Signature s) cells = Signature $ s {cells = cells}
-
-signatureCellArray :: Signature -> Array Cell
-signatureCellArray (Signature {cells: Cells cs}) = cs
-
-signatureCellArray' :: Signature -> Array Cell -> Signature
-signatureCellArray' (Signature s) cells = Signature $ s {cells = Cells cells}
 
 signatureSigma :: Signature -> Maybe Signature
 signatureSigma (Signature s) = s.sigma
@@ -126,10 +120,6 @@ type Display =
   , rate :: Int
   }
 
-newtype Cells = Cells (Array Cell)
-getCells :: Cells -> Array Cell
-getCells (Cells cells) = cells
-
 type ViewControls = 
   { project :: Int
   , slices :: Array Int
@@ -141,3 +131,26 @@ instance eqBoundary :: Eq Boundary where eq = gEq
 instance showBoundary :: Show Boundary where
   show Source = "Source"
   show Target = "Target"
+
+data Error
+  = BadCell CellID
+  | BadDimension
+  | BadKey
+  | NoSource
+  | NoTarget
+  | NoSlice
+  | Other
+
+type OrError = Either Error
+
+orError :: forall a. Error -> Maybe a -> OrError a
+orError error = maybe (Left error) Right
+
+fromError :: forall a. OrError a -> Maybe a
+fromError (Left a) = Nothing
+fromError (Right b) = Just b
+
+guard' :: Error -> Boolean -> OrError Unit
+guard' error cond
+  | cond      = Right unit
+  | otherwise = Left error

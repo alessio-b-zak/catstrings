@@ -76,9 +76,6 @@ onKeyPress doc callback = do
     keypress
     listener true eventTarget
 
-maybeColour :: Maybe Color -> Color
-maybeColour = fromMaybe transparent
-
 transparent :: Color
 transparent = rgba 0 0 0 0.0
 
@@ -97,4 +94,3 @@ splitInThreeBy f g arr =
   , mid: takeWhile g (dropWhile f arr)
   , right: dropWhile g (dropWhile f arr)
   }
-
