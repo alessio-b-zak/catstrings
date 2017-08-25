@@ -41,6 +41,10 @@ data Diagram = Diagram
   , dimension :: Int
   }
 
+
+setCells :: Diagram -> Array DiagramCell -> Diagram
+setCells (Diagram diagram) newCells= Diagram $ diagram {cells = newCells}
+
 instance eqDiagram :: Eq Diagram where
   eq diagram1 diagram2 = 
       diagramSource diagram1 == diagramSource diagram2 &&
