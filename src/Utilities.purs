@@ -2,7 +2,8 @@ module Utilities where
 
 import Prelude
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Array (filter, last, singleton, mapWithIndex, slice, take, drop, takeWhile, dropWhile)
+import Data.Array (cons, filter, head, tail, last, singleton
+                  , mapWithIndex, slice, take, drop, takeWhile, dropWhile)
 import Data.Monoid (class Monoid, mempty)
 import Data.Either (Either, either)
 import Data.String as Str
@@ -82,6 +83,13 @@ transparent = rgba 0 0 0 0.0
 
 foreign import infinity :: Int
 
+pairs :: forall a. Array a -> Array (Tuple a a)
+pairs xs = fromMaybe [] do
+  first <- head xs
+  rest <- tail xs
+  second <- head rest
+  pure $ Tuple first second `cons` pairs rest
+
 splitInThree :: forall a. Int -> Int -> Array a -> {left :: Array a, mid :: Array a, right :: Array a}
 splitInThree lsize msize arr =
   { left: take lsize arr
@@ -101,3 +109,6 @@ forEither value left right = either left right value
 
 forEither_ :: forall a b c d f. Functor f => Either a b -> (a -> f c) -> (b -> f d) -> f Unit
 forEither_ value left right = either (void <<< left) (void <<< right) value
+
+foreign import rangeExcl :: Int -> Int -> Array Int
+infix 8 rangeExcl as ...

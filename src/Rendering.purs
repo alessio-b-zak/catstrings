@@ -108,7 +108,7 @@ spaceWires :: Array Int -> Array Int
 spaceWires = map (\x -> 2*x + 1)
 
 spaceNWiresFrom :: Int -> Int -> Array Int
-spaceNWiresFrom a n = spaceWires (a .. (a+n-1))
+spaceNWiresFrom a n = spaceWires (a ... (a+n))
 
 spaceNWires :: Int -> Array Int
 spaceNWires = spaceNWiresFrom 0
@@ -121,15 +121,21 @@ calculateCellPositions signature gSlice diagram dCell = do
     outputCount <- getNumOutputs signature dCell
     let {left, mid, right} = splitInThree key inputCount gSlice.cellPositions
     let leftBound = wiresRightBound 0 left
-    let centre = leftBound + (min 1 inputCount)
-    let leftBound' = centre - (min 1 outputCount)
+    let centre = leftBound + (max 1 inputCount)
+    let leftBound' = centre - (max 1 outputCount)
     let leftShift = max 0 $ leftBound - leftBound'
     let outputs = spaceNWiresFrom (leftBound' + leftShift) outputCount
     let rightBound = wiresLeftBound infinity right
     let rightShift = leftShift + max 0 (leftBound + 2*(min 1 outputCount) - rightBound)
     let rightWires = map (rightShift + _) right
     let positions = left <> outputs <> rightWires
-    pure $ {shifts: {leftBound, leftShift, rightBound, rightShift}, inputCount, outputCount, centre, positions}
+    pure $
+      { shifts: {leftBound, leftShift, rightBound, rightShift}
+      , inputCount
+      , outputCount
+      , centre
+      , positions
+      }
 
 wiresLeftBound :: Int -> Array Int -> Int
 wiresLeftBound default xs = maybe default (_-1) (head xs)

@@ -28,3 +28,11 @@ exports._eventKey = function (Just) {
 };
 
 exports.infinity = Infinity;
+
+exports.rangeExcl = function (start) {
+  return function (end) {
+    return Array(Math.max(0,end-start)).fill(start).map(function (x, y) {
+      return x + y;
+    });
+  };
+};

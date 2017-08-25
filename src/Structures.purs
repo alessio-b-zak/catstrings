@@ -1,7 +1,7 @@
 module Structures where
 
 import Prelude
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Either (Either(..))
 import Data.Foldable (and)
@@ -152,6 +152,9 @@ orError error = maybe (Left error) Right
 fromError :: forall a. OrError a -> Maybe a
 fromError (Left a) = Nothing
 fromError (Right b) = Just b
+
+catch :: forall a. a -> OrError a -> a
+catch default = fromMaybe default <<< fromError
 
 guard' :: Error -> Boolean -> OrError Unit
 guard' error cond

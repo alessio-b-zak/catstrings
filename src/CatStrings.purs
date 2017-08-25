@@ -5,7 +5,7 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..), uncurry)
-import Data.Array (concat, head, init, last, length, mapWithIndex, singleton, snoc, unzip, zip)
+import Data.Array (concat, cons, head, init, last, length, mapWithIndex, null, singleton, snoc, unzip, zip)
 import Control.Apply (lift2)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Aff (Aff)
@@ -48,7 +48,8 @@ data Query a
 
 data Message
 
-csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
+csApp :: forall eff. H.Component HH.HTML Query Unit Message
+                      (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
 csApp =
   H.lifecycleComponent
     { initialState: const initial
@@ -76,12 +77,13 @@ csApp =
     , selectedCell: Nothing
     }
   
-  eval :: Query ~> H.ComponentDSL Project Query Message (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
+  eval :: Query ~> H.ComponentDSL Project Query Message
+                    (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
   eval = case _ of
     Init reply -> do
-      document <- H.liftEff $ DOM.document =<< DOM.window
+      doc <- H.liftEff $ DOM.document =<< DOM.window
       H.subscribe $
-        ES.eventSource' (onKeyPress document) (Just <<< H.request <<< HandleKey)
+        ES.eventSource' (onKeyPress doc) (Just <<< H.request <<< HandleKey)
       pure reply
     NewZero reply -> do
       H.modify newZeroCell
@@ -118,13 +120,18 @@ csApp =
                     if boundary == Source
                     then Tuple diagram cachedDiagram
                     else Tuple cachedDiagram diagram in
-              forEither (newCell source target project) (H.liftEff <<< alertError) $ \project' ->
-                H.put $ project'
-                  { diagram = Nothing
-                  , cacheSourceTarget = Nothing
-                  }
+              forEither (newCell source target project)
+                (H.liftEff <<< alertError) $
+                \project' ->
+                  H.put $ project'
+                    { diagram = Nothing
+                    , cacheSourceTarget = Nothing
+                    }
         _ -> for_ project.diagram $ \diagram ->
-          H.put $ project { cacheSourceTarget = Just (Tuple boundary diagram), diagram = Nothing }
+          H.put $ project
+            { cacheSourceTarget = Just (Tuple boundary diagram)
+            , diagram = Nothing
+            }
       pure reply
     Identity reply -> do
       project <- H.get
@@ -158,8 +165,10 @@ csApp =
 alertError :: forall eff. Error -> Eff (dom :: DOM, alert :: ALERT | eff) Unit
 alertError error = DOM.alert (errorToString error) =<< DOM.window
   where
-    errorToString DifferentSources = "The sources of the two chosen diagrams do not match"
-    errorToString DifferentTargets = "The targets of the two chosen diagrams do not match"
+    errorToString DifferentSources =
+      "The sources of the two chosen diagrams do not match"
+    errorToString DifferentTargets =
+      "The targets of the two chosen diagrams do not match"
     errorToString error = show error
 
 render :: Project -> H.ComponentHTML Query
@@ -218,9 +227,15 @@ renderSigmaCell signature dimension i cell =
   HH.div [classes ["sigma-cell"]] $
     case cell.source, cell.target of
       Just source, Just target | not cell.singleThumbnail ->
-        [ HH.div [ classes ["sigma-cell-preview"], HE.onClick (HE.input_ (AttachCell cell)) ]
+        [ HH.div
+            [ classes ["sigma-cell-preview"]
+            , HE.onClick (HE.input_ (AttachCell cell))
+            ]
           [ renderDiagram signature source ]
-        , HH.div [ classes ["sigma-cell-preview"], HE.onClick (HE.input_ (AttachCell cell)) ]
+        , HH.div
+            [ classes ["sigma-cell-preview"]
+            , HE.onClick (HE.input_ (AttachCell cell))
+            ]
           [ renderDiagram signature target ]
         ]
       _, _ -> 
@@ -257,8 +272,8 @@ renderDiagram signature (Diagram {source:Nothing,cells:[dCell], dimension}) =
     \cell -> SVG.svg [SVG.viewBox 0 0 10 10] [ dot 5 5 cell.display.colour ]
 
 renderDiagram signature d@(Diagram {source:Just source,cells,dimension})
-  | dimension == 1 = fromMaybe blankDiagram $ fromError $ renderLineDiagram signature d
-  | otherwise      = fromMaybe blankDiagram $ fromError $ render2DDiagram signature d
+  | dimension == 1 = catch blankDiagram $ renderLineDiagram signature d
+  | otherwise      = catch blankDiagram $ render2DDiagram signature d
 renderDiagram signature _ = blankDiagram
 
 render2DDiagram :: Signature -> Diagram -> OrError (H.ComponentHTML Query)
@@ -266,55 +281,80 @@ render2DDiagram signature diagram = do
   g@(GraphicalSlices source slices) <- drawDiagram signature diagram 
   let width = graphicalSlicesWidth g
   let height = length slices
-  svgDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#> \(Tuple h (Tuple preSlice postSlice)) -> do
-    let
-      lines :: forall e. GraphicalSource e -> Boolean -> OrError (Array (H.ComponentHTML Query))
-      lines gSlice post = do
-        regions <- orError NoSource $ init gSlice.regions
-        rightRegion <- orError NoSource $ last gSlice.regions
-        let
-          offset = if post then 5 else 0
-          preOffset = if not post && h == 0 then -1000 else 0
-          postOffset = if post && h + 1 == height then 1000 else 0
-          y0 = h * 10 + offset + preOffset
-          y1 = h * 10 + offset + postOffset + 5
-          
-          central :: State String (Array (H.ComponentHTML Query))
-          central = map (uncurry (<>) <<< unzip) $ sequence $ zipIndex (zip regions (zip gSlice.cells gSlice.cellPositions)) <#>
-            \(Tuple i (Tuple region (Tuple cell pos))) -> do
+  svgDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#>
+    \(Tuple h (Tuple preSlice postSlice)) -> do
+      let
+        lines :: forall e. GraphicalSource e -> Boolean
+              -> OrError (Array (H.ComponentHTML Query))
+        lines gSlice post = do
+          regions <- orError NoSource $ init gSlice.regions
+          rightRegion <- orError NoSource $ last gSlice.regions
+          let
+            offset = if post then 5 else 0
+            preOffset = if not post && h == 0 then -1000 else 0
+            postOffset = if post && h + 1 == height then 1000 else 0
+            y0 = h * 10 + offset + preOffset
+            y1 = h * 10 + offset + postOffset + 5
+            irccps = zipIndex (zip regions (zip gSlice.cells gSlice.cellPositions))
+            
+            central :: State String (Array (H.ComponentHTML Query))
+            central = map (uncurry (<>) <<< unzip) $ sequence $ irccps <#>
+              \(Tuple i (Tuple region (Tuple cell pos))) -> do
+                prevPath <- get
+                let
+                  key = postSlice.rewriteKey
+                  key' = key + if post
+                                then postSlice.rewriteOutputs
+                                else postSlice.rewriteInputs
+                  x = pos * 5
+                  x' = if key <= i && i < key'
+                        then postSlice.rewriteCoord * 5
+                        else pos * 5
+                  Tuple x0 x1 = if post then Tuple x' x else Tuple x x'
+                  herePath = path post x0 y0 x1 y1
+                  nextPath = path (not post) x1 y1 x y0
+                  regionPath = "M" <> herePath <> "L" <> prevPath <> "Z"
+                put nextPath
+                pure $ Tuple
+                  (svgRegion regionPath region.display.colour)
+                  (line' herePath cell.display.colour)
+            
+            right :: State String (Array (H.ComponentHTML Query))
+            right = do
               prevPath <- get
               let
-                x = pos * 10
-                x' = if postSlice.rewriteKey <= i && i < postSlice.rewriteKey + postSlice.rewriteInputs
-                      then postSlice.rewriteCoord * 10
-                      else pos * 10
-                Tuple x0 x1 = if post then Tuple x' x else Tuple x x'
-                herePath = path post x0 y0 x1 y1
-                nextPath = path (not post) x1 y1 x y0
-              put nextPath
-              pure $ Tuple
-                (svgRegion ("M" <> herePath <> "L" <> prevPath <> "L" <> show x0 <> "," <> show y0) region.display.colour)
-                (line' herePath cell.display.colour)
-          
-          right :: State String (Array (H.ComponentHTML Query))
-          right = do
-            prevPath <- get
-            let x = width * 10 + 1000
-            let herePath = path post x y0 x y1
-            pure [svgRegion ("M" <> herePath <> "L" <> prevPath <> "L" <> show x <> "," <> show y0) rightRegion.display.colour]
-          
-        pure $ evalState (lift2 (flip (<>)) central right) (path post (-1000) y1 (-1000) y0)
+                x = width * 5 + 1000
+                herePath = path post x y0 x y1
+                regionPath = "M" <> herePath <> "L" <> prevPath <> "Z"
+              pure [svgRegion regionPath rightRegion.display.colour]
+            
+          pure $ evalState (lift2 (flip (<>)) central right)
+                  (path post (-1000) y1 (-1000) y0)
         
-    before <- lines preSlice false
-    after <- lines postSlice true
-    pure $ before <> after `snoc` dot (postSlice.rewriteCoord * 10) (h * 10 + 5) (postSlice.rewriteCell.display.colour)
-  pure $ SVG.svg [SVG.viewBox 0 0 (10*width) (10*(max 1 height))] svgDiagram
+        dotSVG = dot (postSlice.rewriteCoord * 5) (h * 10 + 5)
+                     (postSlice.rewriteCell.display.colour)
+      
+      before <- lines preSlice false
+      after <- lines postSlice true
+      pure $ before <> after `snoc` dotSVG
+  let svgDiagram' = if null svgDiagram
+        then let
+            positions = -1000 `cons` map (5*_) source.cellPositions `snoc` (5*width + 1000)
+            regions = zip source.regions (pairs positions) <#> \(Tuple region (Tuple start end)) ->
+              let left = path true start (-1000) start 1010
+                  right = path true end 1010 end (-1000)
+              in svgRegion ("M"<>left<>"L"<>right<>"Z") region.display.colour
+            lines = zip source.cells source.cellPositions <#> \(Tuple cell x) ->
+              line true (5*x) (-1000) (5*x) 1010 cell.display.colour
+            in regions <> lines
+        else svgDiagram
+  pure $ SVG.svg [SVG.viewBox 0 0 (5*width) (10*(max 1 height))] svgDiagram'
 
 renderLineDiagram :: Signature -> Diagram -> OrError (H.ComponentHTML Query)
 renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) = do
   colour <- orError NoSource <<< head =<< getColours signature source
-  pure $ SVG.svg [SVG.viewBox 0 0 10 10]
-          [ line true 0 5 10 5 colour ]
+  pure $ SVG.svg [SVG.viewBox 0 0 10 10] [ line true 0 5 10 5 colour ]
+
 renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension}) = do
   -- cells :: OrError [(Int, Cell)]
   cells <- sequence $ sequence <$> map (getCell signature <<< _.id) <$> zipIndex dCells
@@ -330,6 +370,7 @@ renderLineDiagram signature (Diagram {source:Just source,cells: dCells,dimension
   pure $ SVG.svg [SVG.viewBox 0 0 10 10] lines
   where
     onlyColour diagram = orError NoSource <<< head =<< getColours signature diagram
+
 renderLineDiagram signature _ = pure blankDiagram
 
 getColours :: Signature -> Diagram -> OrError (Array Color)
