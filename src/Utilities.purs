@@ -49,7 +49,7 @@ eventKey :: forall eff. Event -> Eff (dom :: DOM | eff) (Maybe Char)
 eventKey e = map fromCharCode <$> _eventKey Just Nothing e
 
 foreign import _eventKey :: forall a eff. (a -> Maybe a) -> (Maybe a)
-												 -> Event -> Eff (dom :: DOM | eff) (Maybe Int)
+                         -> Event -> Eff (dom :: DOM | eff) (Maybe Int)
 
 zipIndex :: forall a . Array a -> Array (Tuple Int a)
 zipIndex = mapWithIndex Tuple

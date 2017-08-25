@@ -24,7 +24,7 @@ attrSVG :: forall r i. AttrName -> String -> IProp r i
 attrSVG = attrNS svgNS
 
 
-type SVGAttrs r = (id::Attr, "class"::Attr, style::Attr | r)
+type SVGAttrs r = (id::Attr, "class"::Attr, style::Attr, shapeRendering :: Attr | r)
 
 -- Elements
 
@@ -99,6 +99,9 @@ y2 n = attr (AttrName "y2") (show n)
 
 d :: forall r i. String -> IProp (d :: Attr | r) i
 d p = attr (AttrName "d") p
+
+shapeRendering :: forall r i. String -> IProp (shapeRendering :: Attr | r) i
+shapeRendering = attr (AttrName "shape-rendering")
 
 points :: forall r i. Array (Tuple Int Int) -> IProp (points :: String | r) i
 points n = attr  (AttrName "points")

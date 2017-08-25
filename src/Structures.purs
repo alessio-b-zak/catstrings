@@ -103,9 +103,6 @@ eqCell cell1 cell2 =
     && cell1.target == cell2.target
     && cell1.invertible == cell2.invertible
 
-cellID :: Cell -> CellID
-cellID cell = cell.id
-
 cellColour :: Cell -> Color
 cellColour cell = cell.display.colour
 

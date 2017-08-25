@@ -7,7 +7,7 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Control.MonadZero (guard)
 import Data.Array (drop, init, length, modifyAt, modifyAtIndices, snoc
                   , zipWith, replicate, take, foldl, cons, range, zip, last
-                  , head, tail, (!!), (..))
+                  , singleton, head, tail, (!!), (..))
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Color (Color, black, white)
@@ -238,6 +238,7 @@ type Shifts = {leftBound :: Int, leftShift :: Int, rightBound :: Int, rightShift
 type GraphicalSource e =
   { cells :: Array Cell
   , cellPositions :: Array Int
+  , regions :: Array Cell
   | e }
 
 type GraphicalSlice = GraphicalSource
@@ -267,20 +268,36 @@ drawDiagram signature diagram = do
   graphicalSource <- getGraphicalSource signature source
   let graphicalBasis = GraphicalSlices graphicalSource []
   foldl (addGraphicalSlice signature) (pure graphicalBasis) $ zip rewrittenSlices (diagramCells diagram)
+--leftSource <- getCell signature =<< orError NoSource (_.id <$> (head <<< diagramCells =<< diagramSource =<< diagramSource diagram))
 
 getGraphicalSource :: Signature -> Diagram -> OrError (GraphicalSource ())
 getGraphicalSource signature source = do
   cells <- sequence $ map (getCell signature <<< _.id) $ diagramCells source
+  regions <- getRegions signature source cells
   pure
     { cells
     , cellPositions: spaceNWires (length (diagramCells source)) 
+    , regions
     }
+
+getRegions :: Signature -> Diagram -> Array Cell -> OrError (Array Cell)
+getRegions signature diagram cells = do
+  left <- getCell signature =<< orError NoSource (
+            _.id <$> (head <<< diagramCells =<< diagramSource diagram))
+  rest <- getTargets signature cells
+  pure $ left `cons` rest
+
+getTargets :: Signature -> Array Cell -> OrError (Array Cell)
+getTargets signature cells =
+    --       ( C -> oe C                                                                              )
+    --        ( DC        ->      oe C )     (m DC  -> oe DC)      (D     ->       m DC)     (C->m D)
+  sequence $ (getCell signature <<< _.id <=< orError NoTarget <<< (head <<< diagramCells <=< _.target)) <$> cells
 
 topSlice :: GraphicalSlices -> GraphicalSource ()
 topSlice (GraphicalSlices source slices) = maybe source sliceToSource (last slices)
 
 sliceToSource :: forall e . GraphicalSource e -> GraphicalSource ()
-sliceToSource {cells, cellPositions} = {cells, cellPositions}
+sliceToSource {cells, cellPositions, regions} = {cells, cellPositions, regions}
 
 slicePairs :: GraphicalSlices -> Array (Tuple (GraphicalSource ()) GraphicalSlice)
 slicePairs (GraphicalSlices source slices) =
@@ -294,12 +311,14 @@ addGraphicalSlice signature mGraphicalSlices (Tuple dSlice diagramCell) = do
     gSlices <- mGraphicalSlices
     let gSlice = topSlice gSlices
     cells <- sequence $ map (getCell signature <<< _.id) $ diagramCells dSlice
+    regions <- getRegions signature dSlice cells
     cellPositions <- calculateCellPositions signature gSlice dSlice diagramCell
     key <- orError BadDimension $ last diagramCell.key
     cell <- getCell signature diagramCell.id
     let fixedGraphics = fixGraphics gSlices cellPositions.shifts
     pure $ addSlice fixedGraphics
         { cells
+        , regions
         , rewriteCell: cell
         , rewriteKey: key
         , rewriteInputs: cellPositions.inputCount
