@@ -32,6 +32,7 @@ import Color (Color, toHexString)
 import Structures
 import Utilities
 import Algorithms
+import Rendering
 
 data Query a
   = Init a
