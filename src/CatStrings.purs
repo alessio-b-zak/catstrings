@@ -5,16 +5,17 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..), uncurry)
-import Data.Array (singleton, mapWithIndex, null, head, mapMaybe, concatMap, length, zip, unzip, cons, snoc, concat, init, last)
+import Data.Array (concat, head, init, last, length, mapWithIndex, singleton, snoc, unzip, zip)
 import Control.Apply (lift2)
+import Control.Monad.Eff (Eff)
 import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.State (State, get, put, evalState)
 
 import DOM (DOM)
 import DOM.HTML (window) as DOM
-import DOM.HTML.Types (htmlDocumentToDocument) as DOM
-import DOM.HTML.Window (document) as DOM
+import DOM.HTML.Types (ALERT)
+import DOM.HTML.Window (alert, document) as DOM
 import DOM.HTML.Indexed.InputType (InputType(InputColor))
 import DOM.Event.Types (Event)
 import Halogen as H
@@ -26,7 +27,7 @@ import Halogen.HTML.CSS (style)
 import Halogen.HTML.SVG as SVG
 import CSS.SVG as SC
 import CSS.Size (px)
-import Color (Color, toHexString, rgba)
+import Color (Color, toHexString)
 
 import Structures
 import Utilities
@@ -46,7 +47,7 @@ data Query a
 
 data Message
 
-csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (avar :: AVAR, dom :: DOM | eff))
+csApp :: forall eff. H.Component HH.HTML Query Unit Message (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
 csApp =
   H.lifecycleComponent
     { initialState: const initial
@@ -74,7 +75,7 @@ csApp =
     , selectedCell: Nothing
     }
   
-  eval :: Query ~> H.ComponentDSL Project Query Message (Aff (avar :: AVAR, dom :: DOM | eff))
+  eval :: Query ~> H.ComponentDSL Project Query Message (Aff (avar :: AVAR, dom :: DOM, alert :: ALERT | eff))
   eval = case _ of
     Init reply -> do
       document <- H.liftEff $ DOM.document =<< DOM.window
@@ -116,7 +117,7 @@ csApp =
                     if boundary == Source
                     then Tuple diagram cachedDiagram
                     else Tuple cachedDiagram diagram in
-              for_ (newCell source target project) $ \project' ->
+              forEither (newCell source target project) (H.liftEff <<< alertError) $ \project' ->
                 H.put $ project'
                   { diagram = Nothing
                   , cacheSourceTarget = Nothing
@@ -152,6 +153,13 @@ csApp =
           | char == 'c' -> eval (ClearDiagram unit)
         _ -> pure unit
       pure $ reply H.Listening
+
+alertError :: forall eff. Error -> Eff (dom :: DOM, alert :: ALERT | eff) Unit
+alertError error = DOM.alert (errorToString error) =<< DOM.window
+  where
+    errorToString DifferentSources = "The sources of the two chosen diagrams do not match"
+    errorToString DifferentTargets = "The targets of the two chosen diagrams do not match"
+    errorToString error = show error
 
 render :: Project -> H.ComponentHTML Query
 render project =
@@ -257,10 +265,7 @@ render2DDiagram signature diagram = do
   g@(GraphicalSlices source slices) <- drawDiagram signature diagram 
   let width = graphicalSlicesWidth g
   let height = length slices
-  let sourceContd = SVG.g [] $ zip source.cells source.cellPositions <#>
-        \(Tuple cell pos) ->
-          line true (pos * 10) (-100) (pos * 10) 0 cell.display.colour
-  mainDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#> \(Tuple h (Tuple preSlice postSlice)) -> do
+  svgDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#> \(Tuple h (Tuple preSlice postSlice)) -> do
     let
       lines :: forall e. GraphicalSource e -> Boolean -> OrError (Array (H.ComponentHTML Query))
       lines gSlice post = do
@@ -268,8 +273,10 @@ render2DDiagram signature diagram = do
         rightRegion <- orError NoSource $ last gSlice.regions
         let
           offset = if post then 5 else 0
-          y0 = h * 10 + offset
-          y1 = h * 10 + offset + 5
+          preOffset = if not post && h == 0 then -1000 else 0
+          postOffset = if post && h + 1 == height then 1000 else 0
+          y0 = h * 10 + offset + preOffset
+          y1 = h * 10 + offset + postOffset + 5
           
           central :: State String (Array (H.ComponentHTML Query))
           central = map (uncurry (<>) <<< unzip) $ sequence $ zipIndex (zip regions (zip gSlice.cells gSlice.cellPositions)) <#>
@@ -291,25 +298,16 @@ render2DDiagram signature diagram = do
           right :: State String (Array (H.ComponentHTML Query))
           right = do
             prevPath <- get
-            let x = width * 10 + 100
+            let x = width * 10 + 1000
             let herePath = path post x y0 x y1
             pure [svgRegion ("M" <> herePath <> "L" <> prevPath <> "L" <> show x <> "," <> show y0) rightRegion.display.colour]
           
-        pure $ evalState (lift2 (flip (<>)) central right) (path post (-100) y1 (-100) y0)
+        pure $ evalState (lift2 (flip (<>)) central right) (path post (-1000) y1 (-1000) y0)
         
     before <- lines preSlice false
     after <- lines postSlice true
     pure $ before <> after `snoc` dot (postSlice.rewriteCoord * 10) (h * 10 + 5) (postSlice.rewriteCell.display.colour)
-  let target = topSlice g
-  let targetContd = SVG.g [] $
-    zip target.cells target.cellPositions <#>
-      \(Tuple cell pos) ->
-        let y0 = height * 10
-            y1 = y0 + 100
-            x = pos * 10
-        in line true x y0 x y1 cell.display.colour
-  pure $ SVG.svg [SVG.viewBox 0 0 (10*width) (10*(max 1 height))] $
-    sourceContd `cons` mainDiagram `snoc` targetContd
+  pure $ SVG.svg [SVG.viewBox 0 0 (10*width) (10*(max 1 height))] svgDiagram
 
 renderLineDiagram :: Signature -> Diagram -> OrError (H.ComponentHTML Query)
 renderLineDiagram signature (Diagram {source:Just source,cells:[],dimension}) = do

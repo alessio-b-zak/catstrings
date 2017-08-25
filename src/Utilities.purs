@@ -4,6 +4,7 @@ import Prelude
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Array (filter, last, singleton, mapWithIndex, slice, take, drop, takeWhile, dropWhile)
 import Data.Monoid (class Monoid, mempty)
+import Data.Either (Either, either)
 import Data.String as Str
 import Data.Char (fromCharCode)
 import Data.Tuple (Tuple(..))
@@ -94,3 +95,9 @@ splitInThreeBy f g arr =
   , mid: takeWhile g (dropWhile f arr)
   , right: dropWhile g (dropWhile f arr)
   }
+
+forEither :: forall a b c. Either a b -> (a -> c) -> (b -> c) -> c
+forEither value left right = either left right value
+
+forEither_ :: forall a b c d f. Functor f => Either a b -> (a -> f c) -> (b -> f d) -> f Unit
+forEither_ value left right = either (void <<< left) (void <<< right) value

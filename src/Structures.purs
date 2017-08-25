@@ -4,13 +4,16 @@ import Prelude
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
 import Data.Either (Either(..))
-import Data.Foldable
-import Data.Generic (class Generic, gShow, gEq)
-import Color
-import Data.Array(length, zipWith)
+import Data.Foldable (and)
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
+import Color (Color)
+import Data.Array (zipWith)
 
 data CellID = CellID Int Int
 derive instance eqCellID :: Eq CellID
+derive instance genericCellID :: Generic CellID _
+instance showCellID :: Show CellID where show = genericShow
 
 type Project = 
   { diagram :: Maybe Diagram
@@ -123,11 +126,9 @@ type ViewControls =
   }
 
 data Boundary = Source | Target
-derive instance genericBoundary :: Generic Boundary
-instance eqBoundary :: Eq Boundary where eq = gEq
-instance showBoundary :: Show Boundary where
-  show Source = "Source"
-  show Target = "Target"
+derive instance eqBoundary :: Eq Boundary
+derive instance genericBoundary :: Generic Boundary _
+instance showBoundary :: Show Boundary where show = genericShow
 
 data Error
   = BadCell CellID
@@ -136,7 +137,12 @@ data Error
   | NoSource
   | NoTarget
   | NoSlice
+  | DifferentSources
+  | DifferentTargets
   | Other
+
+derive instance genericError :: Generic Error _
+instance showError :: Show Error where show = genericShow
 
 type OrError = Either Error
 

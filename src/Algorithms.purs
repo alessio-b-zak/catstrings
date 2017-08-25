@@ -3,15 +3,16 @@ module Algorithms where
 import Prelude
 import Data.Foldable (and, maximum)
 import Data.Tuple (Tuple(..))
+import Data.Either (either)
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Control.MonadZero (guard)
-import Data.Array (drop, init, length, modifyAt, modifyAtIndices, snoc
-                  , zipWith, replicate, take, foldl, cons, range, zip, last
-                  , singleton, head, tail, (!!), (..))
+import Data.Array (cons, drop, foldl, head, init, last, length, modifyAt,
+                   modifyAtIndices, range, replicate, snoc, tail, take, zip,
+                   zipWith, (!!), (..))
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Color (Color, black, white)
-import Color.Scheme.X11
+import Color.Scheme.X11 (blue, gray, green, orange, purple, red, teal, yellow)
 import Utilities
 import Structures
 
@@ -39,7 +40,11 @@ newZeroCell :: Project -> Project
 newZeroCell project = fromMaybe project $ fromError $ addCell Nothing Nothing project
 
 newCell :: Diagram -> Diagram -> Project -> OrError Project
-newCell source target project = addCell (Just source) (Just target) project
+newCell source target project = do
+  let slices = either (const []) id <<< getSlices project.signature
+  guard' DifferentSources $ diagramSource source == diagramSource target
+  guard' DifferentTargets $ last (slices source) == last (slices target)
+  addCell (Just source) (Just target) project
 
 addCell :: Maybe Diagram -> Maybe Diagram -> Project -> OrError Project
 addCell source target project = do
