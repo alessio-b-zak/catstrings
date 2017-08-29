@@ -5,7 +5,8 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..), uncurry)
-import Data.Array (concat, cons, head, init, last, length, mapWithIndex, null, singleton, snoc, unzip, zip)
+import Data.Array (concat, cons, head, init, last, length, mapWithIndex, null
+                  , singleton, snoc, unzip, zip)
 import Control.Apply (lift2)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Aff (Aff)
