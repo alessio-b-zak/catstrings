@@ -1,4 +1,4 @@
-module Homtopies where
+module Homotopies where
 
 import Algorithms
 import Prelude
