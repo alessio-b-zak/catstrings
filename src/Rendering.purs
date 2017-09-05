@@ -107,11 +107,11 @@ addGraphicalSlice signature mGraphicalSlices (Tuple dSlice diagramCell) = do
 spaceWires :: Array Int -> Array Int
 spaceWires = map (\x -> 2*x + 1)
 
-spaceNWiresFrom :: Int -> Int -> Array Int
-spaceNWiresFrom a n = spaceWires (a ... (a+n))
-
 spaceNWires :: Int -> Array Int
-spaceNWires = spaceNWiresFrom 0
+spaceNWires n = spaceWires (0 ... n)
+
+spaceNWiresFrom :: Int -> Int -> Array Int
+spaceNWiresFrom a = map (a+_) <<< spaceNWires
 
 -- Black Magic from Charlie's warped brain
 calculateCellPositions :: Signature -> GraphicalSource () -> Diagram -> DiagramCell -> OrError CellPositions
