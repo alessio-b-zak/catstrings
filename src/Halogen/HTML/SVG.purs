@@ -24,7 +24,8 @@ attrSVG :: forall r i. AttrName -> String -> IProp r i
 attrSVG = attrNS svgNS
 
 
-type SVGAttrs r = (id::Attr, "class"::Attr, style::Attr, shapeRendering :: Attr | r)
+type SVGAttrs r = I.MouseEvents
+                    (id::Attr, "class"::Attr, style::Attr, shapeRendering :: Attr | r)
 
 -- Elements
 

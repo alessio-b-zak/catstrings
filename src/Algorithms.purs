@@ -7,12 +7,12 @@ import Data.Either (either)
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Control.MonadZero (guard)
 import Data.Array ( cons, drop, foldl, init, last, length, modifyAt
-                  , modifyAtIndices, range, replicate, snoc, take, zipWith
-                  , (!!))
+                  , modifyAtIndices, null, range, replicate, snoc, take
+                  , zipWith, (!!))
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Color (Color, black, white)
-import Color.Scheme.X11 (blue, gray, green, orange, purple, red, teal, yellow)
+import Color.Scheme.X11 (blue, gray, green, orange, purple, red, teal, pink)
 import Utilities
 import Structures
 
@@ -75,7 +75,7 @@ addCell source target project = do
               , id: CellID dimension nextId
               , invertible: false
               , name: show dimension <> "-cell " <> show nextId
-              , singleThumbnail: dimension < 2
+              , singleThumbnail: dimension < 3
               , display: {colour: pickColour dimension nextId, rate: 1}
               }
   pure $ project { signature = addToSignature project.signature}
@@ -86,8 +86,8 @@ pickColour dimension nextId =
   where
     colours =
       [ [ red, green, black ]
-      , [ orange, blue, white ]
-      , [ yellow, purple, gray ]
+      , [ orange, blue, pink ]
+      , [ white, purple, gray ]
       ]
 
 getCell :: Signature -> CellID -> OrError Cell
@@ -216,6 +216,12 @@ match signature baseDiagram matchDiagram
         --if baseDiagram == matchDiagram then [[]] else []
         guard $ baseDiagram == matchDiagram
         pure []
+  | diagramDimension baseDiagram == diagramDimension matchDiagram
+    && null (diagramCells baseDiagram) && null (diagramCells matchDiagram) =
+      case diagramSource baseDiagram, diagramSource matchDiagram of
+        Just baseSource, Just matchSource ->
+          (cons 0) <$> match signature baseSource matchSource
+        _, _ -> []
   | otherwise =
       do
         Tuple i mSlice <- mapWithIndex (\num _ -> Tuple num (slice signature baseDiagram num)) (diagramCells baseDiagram)
@@ -231,6 +237,7 @@ match signature baseDiagram matchDiagram
             matchCells = diagramCells matchDiagram
         let aboveSlice = drop i baseCells
         let baseCellsToCheck = take (length matchCells) aboveSlice
+        guard $ length matchCells == length baseCellsToCheck
         guard $ and $ zipWith eqDiagramCell (map (alterCellCoords coords) matchCells) baseCellsToCheck
         
         -- ensure all rewrites above are same

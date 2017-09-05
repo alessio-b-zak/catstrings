@@ -95,6 +95,7 @@ body {
 	border-radius: 10px;
 	float: left;
 	background: #ddd;
+	overflow: hidden;
 }
 
 .sigma-cell-preview + .sigma-cell-preview {

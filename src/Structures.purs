@@ -15,13 +15,20 @@ derive instance eqCellID :: Eq CellID
 derive instance genericCellID :: Generic CellID _
 instance showCellID :: Show CellID where show = genericShow
 
+type Matches =
+  { id :: CellID
+  , source :: Array (Array Int)
+  , target :: Array (Array Int)
+  , rewrite :: Array (Array Int)
+  }
+
 type Project = 
   { diagram :: Maybe Diagram
   , signature :: Signature
   , cacheSourceTarget :: Maybe (Tuple Boundary Diagram)
   , initialized :: Boolean
   , viewControls :: ViewControls
-  , selectedCell :: Maybe Cell
+  , matches :: Maybe Matches
   } 
 
 type DiagramCell = 
@@ -137,6 +144,8 @@ instance showBoundary :: Show Boundary where show = genericShow
 data Error
   = BadCell CellID
   | BadDimension
+  | NoDiagram
+  | NoMatch
   | BadKey
   | NoSource
   | NoTarget
