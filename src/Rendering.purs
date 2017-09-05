@@ -133,7 +133,7 @@ calculateCellPositions signature gSlice diagram dCell = do
       { shifts: {leftBound, leftShift, rightBound, rightShift}
       , inputCount
       , outputCount
-      , centre
+      , centre: leftShift + centre
       , positions
       }
 
