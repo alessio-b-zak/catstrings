@@ -39,6 +39,8 @@ lastOrZero xs = fromMaybe 0 $ last xs
 if_ :: forall a . Monoid a => a -> Boolean -> a
 if_ x bool = if bool then x else mempty
 
+infix 8 if_ as ??
+
 foreign import inputValue :: forall eff. Event -> Eff (dom :: DOM | eff) String
 
 colourValue :: forall eff . Event -> Eff (dom :: DOM | eff) (Maybe Color)

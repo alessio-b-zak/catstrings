@@ -4,7 +4,7 @@ import Prelude
 import Data.Foldable (maximum)
 import Data.Tuple (Tuple(..))
 import Data.Maybe (fromMaybe, maybe)
-import Data.Array (cons, foldl, head, last, length, snoc, tail, zip, (..))
+import Data.Array (cons, foldl, head, last, length, snoc, tail, zip)
 import Data.Traversable (sequence)
 import Utilities
 import Structures
@@ -144,8 +144,10 @@ wiresRightBound :: Int -> Array Int -> Int
 wiresRightBound default xs = maybe default (1+_) (last xs)
 
 fixGraphics :: GraphicalSlices -> Shifts -> GraphicalSlices
-fixGraphics (GraphicalSlices source slices) shifts = (GraphicalSlices (applyShifts source) (map applyShifts slices))
+fixGraphics (GraphicalSlices source slices) shifts = (GraphicalSlices (applyShifts source) (map applyShifts' slices))
   where
+    applyShifts' :: GraphicalSlice -> GraphicalSlice
+    applyShifts' s@{rewriteCoord} = applyShifts (s {rewriteCoord = applyShift rewriteCoord})
     applyShifts :: forall r. GraphicalSource r -> GraphicalSource r
     applyShifts s@{cellPositions} = s{cellPositions = map applyShift cellPositions}
     applyShift n

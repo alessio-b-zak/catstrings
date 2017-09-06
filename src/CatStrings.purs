@@ -4,13 +4,12 @@ import Prelude
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
-import Data.Tuple (Tuple(..), uncurry)
+import Data.Tuple (Tuple(..))
 import Data.Array (concat, cons, elem, foldr, head, init, last, length
-                  , mapWithIndex, null, replicate, singleton, snoc, unzip, zip)
-import Data.Either (either)
+                  , mapWithIndex, null, replicate, singleton, snoc, unzip, zip
+                  , (!!))
 import Data.Ord (abs)
 import Data.BooleanEq ((⊕))
-import Control.Apply (lift2)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.AVar (AVAR)
@@ -183,7 +182,7 @@ csApp =
           diagram <- orError NoDiagram project.diagram
           cellID <- orError NoMatch $ project.matches <#> _.id
           attachDiagram <- liftCell <$> getCell project.signature cellID
-          attach boundary coords attachDiagram diagram
+          attach project.signature boundary coords attachDiagram diagram
       forEither oeDiagram'
         (H.liftEff <<< alertError) $
         \diagram' -> H.put (project {diagram = Just diagram'})
@@ -304,7 +303,7 @@ renderSigma sig@(Signature s) =
         , HE.onClick (HE.input_ NewZero)
         ]
       [ HH.u_ [ HH.text "N" ],  HH.text "ew 0-cell" ]
-    ] `if_` (s.dimension == 0)
+    ] ?? (s.dimension == 0)
   ]
 
 renderSigmaCell :: Signature -> Int -> Int -> Cell -> H.ComponentHTML Query
@@ -352,7 +351,7 @@ renderDiagram matches sig (Diagram {source:Nothing,cells:[dCell], dimension}) =
   fromMaybe blankDiagram $ fromError $ do
     cell <- getCell sig dCell.id
     let validMatch = [] `elem` fromMaybe [] (matches <#> _.rewrite)
-    let overlay = [ matchOverlay Nothing [] "M2,2v6h6v-6Z" ] `if_` validMatch
+    let overlay = [ matchOverlay Nothing [] "M2,2v6h6v-6Z" ] ?? validMatch
     pure $ SVG.svg [SVG.viewBox 0 0 10 10] $
       [ dot 5 5 cell.display.colour ] <> overlay
 
@@ -363,11 +362,10 @@ renderDiagram _ _ _  = blankDiagram
 
 render2DDiagram :: Maybe Matches -> Signature -> Diagram
                 -> OrError (H.ComponentHTML Query)
-render2DDiagram matches sig diagram = do
+render2DDiagram mMatches sig diagram = do
   g@(GraphicalSlices source slices) <- drawDiagram sig diagram 
   let width = graphicalSlicesWidth g
   let height = length slices
-  --                                  $ 
   svgDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#>
     \(Tuple h (Tuple preSlice postSlice)) -> do
       let
@@ -441,7 +439,31 @@ render2DDiagram matches sig diagram = do
               line true (5*x) (-1000) (5*x) 1010 cell.display.colour
             in regions <> lines
         else svgDiagram
-  pure $ SVG.svg [SVG.viewBox 0 0 (5*width) (10*(max 1 height))] svgDiagram'
+  let
+    highlighting = fromMaybe [] do
+      matches <- mMatches
+      let
+        leftMatch = [matchOverlay (Just Source) []
+            ("M2,-1000h-1002v"<>show (2000+height*10)<>"h1002Z")]
+          ?? ([] `elem` matches.source)
+        rightMatch = [matchOverlay (Just Target) []
+            ("M"<>show(width*5-2)<>",-1000h1002v"<>show(2000+height*10)<>"h-1002Z")]
+          ?? ([] `elem` matches.target)
+        topMatches = matches.source >>= case _ of
+          [wire] ->
+            let x = fromMaybe 0 $ source.cellPositions !! wire
+            in [matchOverlay (Just Source) [wire]
+              ("M"<>show(x*5-2)<>",0l2,2l2,-2v-1000h-4Z")]
+          _ -> []
+        bottomMatches = matches.target >>= case _ of
+          [wire] ->
+            let x = fromMaybe 0 $ (topSlice g).cellPositions !! wire
+            in [matchOverlay (Just Target) [wire]
+              ("M"<>show(x*5-2)<>","<>show(height*10)<>"l2,-2l2,2v1000h-4Z")]
+          _ -> []
+        
+      pure $ leftMatch <> rightMatch <> topMatches <> bottomMatches
+  pure $ SVG.svg [SVG.viewBox 0 0 (5*width) (10*(max 1 height))] $ svgDiagram' <> highlighting
 
 renderLineDiagram :: Maybe Matches -> Signature -> Diagram
                   -> OrError (H.ComponentHTML Query)
@@ -451,9 +473,11 @@ renderLineDiagram mMatches sig (Diagram {source:Just source,cells:[],dimension})
     highlighting = fromMaybe [] do
       matches <- mMatches
       let
-        leftMatch = [matchOverlay (Just Source) [] "M0,3v4l2,-2Z"] `if_` ([] `elem` matches.source)
-        midMatch = [matchOverlay Nothing [0] "M2,2v6h6v-6Z"] `if_` ([0] `elem` matches.rewrite)
-        rightMatch = [matchOverlay (Just Target) [] "M10,3v4l-2,-2Z"] `if_` ([] `elem` matches.target)
+        leftMatch = [matchOverlay (Just Source) [] "M0,3l2,2l-2,2h-1000v-4Z"]
+                    ?? ([] `elem` matches.source)
+        midMatch = [matchOverlay Nothing [0] "M2,2v6h6v-6Z"] ?? ([0] `elem` matches.rewrite)
+        rightMatch = [matchOverlay (Just Target) [] "M10,3l-2,2l2,2h1000v-4Z"]
+                     ?? ([] `elem` matches.target)
       pure $ leftMatch <> midMatch <> rightMatch
       
   pure $ SVG.svg [SVG.viewBox 0 0 10 10] $
@@ -487,11 +511,13 @@ renderLineDiagram mMatches sig (Diagram {source:Just source,cells: dCells,dimens
           cell <- fromError $ getCell sig matches.id
           source <- cell.source
           pure $ length (diagramCells source) * 10 - 4
-        leftMatch = [matchOverlay (Just Source) [] "M0,3v4l2,-2Z"] `if_` ([] `elem` matches.source)
+        leftMatch = [matchOverlay (Just Source) [] "M0,3l2,2l-2,2h-1000v-4Z"]
+                    ?? ([] `elem` matches.source)
         midMatches = matches.rewrite >>= case _ of
           [x] -> [matchOverlay Nothing [x] ("M"<>show (x*10+2)<>",2v6h"<>h<>"v-6Z")]
           _   -> []
-        rightMatch = [matchOverlay (Just Target) [] ("M"<>width<>",3v4l-2,-2Z")] `if_` ([] `elem` matches.target)
+        rightMatch = [matchOverlay (Just Target) [] ("M"<>width<>",3l-2,2l2,2h1000v-4Z")]
+                     ?? ([] `elem` matches.target)
       Just $ leftMatch <> midMatches <> rightMatch
 
 renderLineDiagram _ _ _ = pure blankDiagram

@@ -146,44 +146,51 @@ liftCell cell = Diagram
 
 type Coords = Array Int
 
-attach :: Boundary -> Coords -> Diagram -> Diagram -> OrError Diagram
-attach boundary coords attachDiagram baseDiagram  = do
+attach :: Signature -> Boundary -> Coords -> Diagram -> Diagram -> OrError Diagram
+attach sig boundary coords attachDiagram baseDiagram  = do
     guard' BadDimension $ embeddingLevel >= 0
     if embeddingLevel == 0
-      then appendCells baseDiagram attachDiagram boundary coords
-      else appendLowerCells baseDiagram attachDiagram boundary coords
+      then appendCells sig baseDiagram attachDiagram boundary coords
+      else appendLowerCells sig baseDiagram attachDiagram boundary coords
   where
     baseDimension = diagramDimension baseDiagram
     attachDimension  = diagramDimension attachDiagram
     embeddingLevel = baseDimension - attachDimension
 
-appendCells :: Diagram -> Diagram -> Boundary -> Coords -> OrError Diagram
-appendCells baseDiagram attachDiagram Source coords = do
+appendCells :: Signature -> Diagram -> Diagram -> Boundary -> Coords -> OrError Diagram
+appendCells sig baseDiagram attachDiagram Source coords = do
   appendedDiagram <- insertDiagram [0] baseDiagram $ alterCoords coords attachDiagram
   source <- orError NoSource $ diagramSource attachDiagram
-  pure $ changeSource source appendedDiagram
-appendCells baseDiagram attachDiagram Target coords =
-    insertDiagram [length $ diagramCells attachDiagram] baseDiagram $
+  let position = lastOrZero coords
+  let size = length $ diagramCells $ fromMaybe source $ last <=< fromError $ getSlices sig attachDiagram
+  pure $ changeSource position size source appendedDiagram
+appendCells sig baseDiagram attachDiagram Target coords =
+    insertDiagram [length $ diagramCells baseDiagram] baseDiagram $
         alterCoords coords attachDiagram
 
 updateKey :: forall f. Functor f => (Array Int -> f (Array Int)) -> DiagramCell -> f DiagramCell
 updateKey fn diagramCell = (diagramCell { key = _}) <$> fn diagramCell.key
 
-appendLowerCells :: Diagram -> Diagram -> Boundary -> Coords -> OrError Diagram
-appendLowerCells baseDiagram@(Diagram record) attachDiagram Source coords = do
+appendLowerCells :: Signature -> Diagram -> Diagram -> Boundary -> Coords -> OrError Diagram
+appendLowerCells sig baseDiagram@(Diagram record) attachDiagram Source coords = do
   let attachDimension = diagramDimension attachDiagram - 1
   newCells <- sequence $ map (updateKey (orError BadDimension <<< modifyAt attachDimension (_+1))) record.cells
   source <- orError NoSource $ diagramSource baseDiagram
-  diagramSource' <- attach Source coords attachDiagram source
+  diagramSource' <- attach sig Source coords attachDiagram source
   pure $ Diagram (record { source = Just diagramSource', cells = newCells })
-appendLowerCells baseDiagram@(Diagram record) attachDiagram Target coords = do
+appendLowerCells sig baseDiagram@(Diagram record) attachDiagram Target coords = do
   source <- orError NoSource $ diagramSource baseDiagram
-  diagramSource' <- attach Target coords attachDiagram source
+  diagramSource' <- attach sig Target coords attachDiagram source
   pure $ Diagram ( record { source = Just diagramSource' })
 
-changeSource :: Diagram -> Diagram -> Diagram
-changeSource newSource baseDiagram@(Diagram record) =
-    Diagram $ record { source = Just newSource }
+changeSource :: Int -> Int -> Diagram -> Diagram -> Diagram
+changeSource pos size newSource baseDiagram@(Diagram record) =
+    Diagram record {source = source'}
+  where
+    {left, right} = splitInThree pos size (maybe [] diagramCells record.source)
+    source' = do
+      Diagram source <- record.source
+      pure $ Diagram source {cells = left <> diagramCells newSource <> right}
 
 slice :: Signature -> Diagram -> Int -> OrError Diagram
 slice signature diagram height =

@@ -5,8 +5,7 @@ import Prelude
 import Structures
 
 import Control.Apply(lift2)
-import Data.Array (index, last, (!!), modifyAt, length)
-import Data.Maybe (Maybe)
+import Data.Array (last, length, modifyAt, (!!))
 import Utilities (splitInThree)
 
 type WireBoundaries = { leftBoundary :: Int, rightBoundary :: Int }
