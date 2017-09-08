@@ -3,14 +3,15 @@ module CatStrings where
 import Prelude
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
+import Data.Foldable (minimum, maximum)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
 import Data.Int (toNumber, fromString)
-import Data.Array (concat, cons, elem, foldl, foldr, head, init, last, length
-                  , mapWithIndex, null, replicate, singleton, snoc, unzip, zip
-                  , (!!))
+import Data.Array (concat, cons, drop, elem, foldl, foldr, head, init, last
+                  , length, mapWithIndex, null, replicate, singleton, snoc
+                  , take, unzip, zip, (!!))
 import Data.Either (either)
-import Data.Ord (abs)
+import Data.Ord (abs, comparing)
 import Data.BooleanEq ((⊕))
 import Control.Monad.Eff (Eff)
 import Control.Monad.Aff (Aff)
@@ -506,8 +507,49 @@ render2DDiagram sliceShown mMatches sig diagram = do
                     <>show(dx*2.5+2.0)<>",-2l"<>show(dx*2.5+2.0)<>",2v1000h"
                     <>show(-dx*5.0-4.0)<>"Z")]
           _ -> []
+        midMatches = matches.rewrite >>= case _ of
+          coords@[y, wire] -> catch [] $ do
+            cell <- getCell sig matches.id
+            rewriteSource <- orError NoSource cell.source
+            let
+              height = length $ diagramCells rewriteSource
+              rows = take height $ drop y $ slices
+            if height == 0
+              then
+                let
+                  row = maybe source sliceToSource $ slices !! (y-1)
+                  x = fromMaybe 1 $ row.cellPositions !! wire
+                in pure [matchOverlay Nothing coords $
+                    "M"<>show(x*5-4)<>","<>show(y*10-2)<>"v4h8v-4Z"
+                ]
+              else do
+                let
+                  rowsSlices =
+                    GraphicalSlices (maybe source sliceToSource $ slices !! (y-1)) rows
+                  rowPairs = slicePairs rowsSlices
+                  leftBound (Tuple prev this)
+                    | this.rewriteKey == 0 = 0
+                    | otherwise = fromMaybe 0 $ minimum
+                      [ this.rewriteCoord - 1
+                      , maybe infinity (_+1) $ prev.cellPositions !! (this.rewriteKey-1)
+                      , maybe infinity (_+1) $ this.cellPositions !! (this.rewriteKey-1)
+                      ]
+                  rightBound (Tuple prev this) = fromMaybe 2 $ maximum
+                    [ this.rewriteCoord + 1
+                    , maybe 0 (_+1) $
+                        prev.cellPositions !! (this.rewriteKey + this.rewriteInputs - 1)
+                    , maybe 0 (_+1) $
+                        this.cellPositions !! (this.rewriteKey + this.rewriteOutputs - 1)
+                    ]
+                  left = fromMaybe 0 $ minimum $ leftBound <$> rowPairs
+                  right = fromMaybe 2 $ maximum $ rightBound <$> rowPairs
+                pure [matchOverlay Nothing coords $
+                    "M"<>show(left*5+2)<>","<>show(y*10+2)<>"v"<>show(height*10-4)
+                    <>"H"<>show(right*5-2)<>"v"<>show(4-height*10)<>"Z"
+                ]
+          _ -> []
         
-      pure $ leftMatch <> rightMatch <> topMatches <> bottomMatches
+      pure $ leftMatch <> rightMatch <> topMatches <> bottomMatches <> midMatches
   pure $ SVG.svg [SVG.viewBox 0 0 (5*width) (10*(max 1 height))] $ svgDiagram' <> highlighting
 
 renderLineDiagram :: Maybe Matches -> Signature -> Diagram

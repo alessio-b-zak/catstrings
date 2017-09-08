@@ -2,6 +2,7 @@ module Algorithms where
 
 import Prelude
 import Data.Foldable (and)
+import Data.Unfoldable (fromMaybe) as Unfoldable
 import Data.Tuple (Tuple(..))
 import Data.Either (either)
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
@@ -9,7 +10,6 @@ import Control.MonadZero (guard)
 import Data.Array ( cons, drop, foldl, init, last, length, modifyAt
                   , modifyAtIndices, null, range, replicate, snoc, take
                   , zipWith, (!!))
-import Data.FunctorWithIndex (mapWithIndex)
 import Data.Traversable (sequence, find)
 import Color (Color, black, white)
 import Color.Scheme.X11 (blue, gray, green, orange, purple, red, teal, pink)
@@ -220,7 +220,6 @@ getSlices signature diagram =
         sliceHeights = range 0 sliceNum
      in sequence $ map (slice signature diagram) sliceHeights
 
--- TODO Fix fromError
 match :: Signature -> Diagram -> Diagram -> Array (Array Int)
 match signature baseDiagram matchDiagram
   | diagramDimension baseDiagram == 0 =
@@ -236,23 +235,22 @@ match signature baseDiagram matchDiagram
           (cons 0) <$> match signature baseSource matchSource
         _, _ -> []
   | otherwise =
-      do
-        Tuple i mSlice <- mapWithIndex (\num _ -> Tuple num (slice signature baseDiagram num)) (diagramCells baseDiagram)
-        -- match _ _ :: [[Int]]
-        submatch <- fromMaybe [] do
-          thisSlice <- fromError mSlice
-          source <- diagramSource matchDiagram
-          pure $ match signature thisSlice source
+      catch [] $ zipIndex <$> getSlices signature baseDiagram <#> \iSlices -> do
+        Tuple i thisSlice <- iSlices
         
+        source <- Unfoldable.fromMaybe $ diagramSource matchDiagram
+        
+        -- match _ _ :: [[Int]]
         -- submatch :: [Int]
-        let coords = i `cons` submatch
+        submatch <- match signature thisSlice source
+        
+        
         let baseCells  = diagramCells baseDiagram
             matchCells = diagramCells matchDiagram
         let aboveSlice = drop i baseCells
         let baseCellsToCheck = take (length matchCells) aboveSlice
         guard $ length matchCells == length baseCellsToCheck
-        guard $ and $ zipWith eqDiagramCell (map (alterCellCoords coords) matchCells) baseCellsToCheck
-        
-        -- ensure all rewrites above are same
+        guard $ and $
+          zipWith eqDiagramCell (map (alterCellCoords submatch) matchCells) baseCellsToCheck
       
-        pure coords
+        pure $ i `cons` submatch
