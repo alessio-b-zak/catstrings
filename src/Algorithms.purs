@@ -17,14 +17,20 @@ import Utilities
 import Structures
 
 getNumInputs :: Signature -> DiagramCell -> OrError Int
-getNumInputs signature diagramCell = do
-    cell <- getCell signature diagramCell.id
+getNumInputs signature diagramCell = getNumInputs' signature diagramCell.id
+
+getNumInputs' :: Signature -> CellID -> OrError Int
+getNumInputs' signature cellId = do
+    cell <- getCell signature cellId
     source <- orError NoSource cell.source
     pure $ length $ diagramCells source
   
 getNumOutputs :: Signature -> DiagramCell -> OrError Int
-getNumOutputs signature diagramCell = do
-    cell <- getCell signature diagramCell.id
+getNumOutputs signature diagramCell = getNumOutputs' signature diagramCell.id
+
+getNumOutputs' :: Signature -> CellID -> OrError Int
+getNumOutputs' signature cellId = do
+    cell <- getCell signature cellId
     target <- orError NoTarget cell.target
     pure $ length $ diagramCells target
 

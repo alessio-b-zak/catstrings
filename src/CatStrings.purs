@@ -5,9 +5,11 @@ import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Traversable (for_, sequence)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
-import Data.Array (concat, cons, elem, foldr, head, init, last, length
+import Data.Int (toNumber, fromString)
+import Data.Array (concat, cons, elem, foldl, foldr, head, init, last, length
                   , mapWithIndex, null, replicate, singleton, snoc, unzip, zip
                   , (!!))
+import Data.Either (either)
 import Data.Ord (abs)
 import Data.BooleanEq ((⊕))
 import Control.Monad.Eff (Eff)
@@ -19,7 +21,8 @@ import DOM (DOM)
 import DOM.HTML (window) as DOM
 import DOM.HTML.Types (ALERT)
 import DOM.HTML.Window (alert, document) as DOM
-import DOM.HTML.Indexed.InputType (InputType(InputColor))
+import DOM.HTML.Indexed.InputType (InputType(InputColor,InputNumber))
+import DOM.HTML.Indexed.StepValue (StepValue(..))
 import DOM.Event.Types (Event, MouseEvent, mouseEventToEvent)
 import DOM.Event.Event (stopPropagation)
 import Halogen as H
@@ -52,6 +55,7 @@ data Query a
   | HandleKey Event (ES.SubscribeStatus -> a)
   | ClearDiagram a
   | CancelAttach a
+  | SetSlice Int Event a
 
 data Message
 
@@ -82,6 +86,7 @@ csApp =
     , initialized: false
     , viewControls: { project: 0, slices: [] }
     , matches: Nothing
+    , sliceShown: []
     }
   
   eval :: Query ~> H.ComponentDSL Project Query Message
@@ -116,7 +121,7 @@ csApp =
       project <- H.get
       let cellDiagram = liftCell cell
       case project.diagram of
-        Nothing -> H.put $ project {diagram = Just cellDiagram}
+        Nothing -> H.put $ setDiagram project $ Just cellDiagram
         Just diagram
           | diagramDimension cellDiagram == 0 ->
               H.liftEff $ alert "Cannot attach a 0-cell"
@@ -154,12 +159,6 @@ csApp =
               H.liftEff $ alert $ "Cannot attach/rewrite a "
                                   <> show (diagramDimension cellDiagram) <> "-cell to a "
                                   <> show (diagramDimension cellDiagram) <> "-cell"
-            -- case cell.source, cell.target of
-            --   Just source, Just target ->
-            --     case match project.signature diagram (liftCell cell) of
-            --       [] -> H.put $ project { matches = Nothing }
-            --       matches ->
-            --         H.put $ project { matches = Just { id: cell.id, locations: matches } }
       pure reply
     PerformAttach (Tuple Nothing coords) reply -> do
       project <- H.get
@@ -173,8 +172,8 @@ csApp =
           rewrite coords diagram src tgt
       forEither oeDiagram'
         (H.liftEff <<< alertError) $
-        \diagram' -> H.put (project {diagram = Just diagram'})
-      eval $ CancelAttach reply
+        \diagram' -> H.put $ setDiagram project $ Just diagram'
+      pure reply
     PerformAttach (Tuple (Just boundary) coords) reply -> do
       project <- H.get
       let
@@ -185,8 +184,8 @@ csApp =
           attach project.signature boundary coords attachDiagram diagram
       forEither oeDiagram'
         (H.liftEff <<< alertError) $
-        \diagram' -> H.put (project {diagram = Just diagram'})
-      eval $ CancelAttach reply
+        \diagram' -> H.put $ setDiagram project $ Just diagram'
+      pure reply
     SetCache boundary reply -> do
       project <- H.get
       case project.cacheSourceTarget of
@@ -200,16 +199,12 @@ csApp =
               forEither (newCell source target project)
                 (H.liftEff <<< alertError) $
                 \project' ->
-                  H.put $ project'
-                    { diagram = Nothing
-                    , cacheSourceTarget = Nothing
-                    }
+                  H.put $ setDiagram project'{cacheSourceTarget = Nothing} Nothing
         _ -> for_ project.diagram $ \diagram ->
-          H.put $ project
-            { cacheSourceTarget = Just (Tuple boundary diagram)
-            , diagram = Nothing
-            }
-      eval $ CancelAttach reply
+          H.put $ setDiagram
+                    project{cacheSourceTarget = Just (Tuple boundary diagram)}
+                    Nothing
+      pure reply
     Identity reply -> do
       project <- H.get
       let diagram' = do
@@ -219,16 +214,16 @@ csApp =
               , cells: []
               , dimension: diagram.dimension + 1
               }
-      H.put $ project { diagram = diagram' }
-      eval $ CancelAttach reply
+      H.put $ setDiagram project diagram'
+      pure reply
     ClearCache reply -> do
       project <- H.get
       H.put $ project { cacheSourceTarget = Nothing }
-      eval $ CancelAttach reply
+      pure reply
     ClearDiagram reply -> do
       project <- H.get
-      H.put $ project { diagram = Nothing }
-      eval $ CancelAttach reply
+      H.put $ setDiagram project Nothing
+      pure reply
     HandleKey event reply -> do
       H.liftEff (eventKey event) >>= case _ of
         Just char
@@ -241,6 +236,14 @@ csApp =
       pure $ reply H.Listening
     CancelAttach reply -> do
       H.modify (_ { matches = Nothing })
+      pure reply
+    SetSlice i ev reply -> do
+      name <- H.liftEff $ inputValue ev
+      for_ (fromString name) $ \number -> do
+        project <- H.get
+        let {left,mid,right} = splitInThree i 1 project.sliceShown
+        let sliceShown' = left <> [number] <> map (const 0) right
+        H.put $ project {sliceShown = sliceShown'}
       pure reply
 
 alertError :: forall eff. Error -> Eff (dom :: DOM, alert :: ALERT | eff) Unit
@@ -260,7 +263,9 @@ render project =
   HH.div [classes ["app"]] $
     [ renderSignature project.signature
     , HH.div [classes ["diagram"]] $
-      maybe [] (singleton <<< renderDiagram project.matches project.signature) project.diagram
+      maybe []
+        (singleton <<< renderDiagram project.sliceShown project.matches project.signature)
+        project.diagram
     , HH.div [classes ["buttons"]] $
       [ HH.button [ HE.onClick (HE.input_ (SetCache Source)) ]
         [ HH.u_ [ HH.text "S" ],  HH.text "ource" ]
@@ -270,8 +275,36 @@ render project =
         [ HH.u_ [ HH.text "I" ],  HH.text "dentity" ]
       , HH.button [ HE.onClick (HE.input_ ClearDiagram) ]
         [ HH.u_ [ HH.text "C" ],  HH.text "lear" ]
-      ] <> renderCache project
+      ] <> renderSliceChooser project
+        <> renderCache project
     ]
+
+renderSliceChooser :: Project -> Array (H.ComponentHTML Query)
+renderSliceChooser p@{ sliceShown: [] } = []
+renderSliceChooser p@{ diagram: Nothing } = []
+renderSliceChooser p@{ diagram: Just diagram } =
+  [ HH.div [classes ["sliceChooser"]]
+    [ HH.h1_ [HH.text "Show slice:"]
+    , HH.p_ $ unsnocs p.sliceShown <#> \(Tuple preds currentHeight) ->
+      let
+        maxBound = toNumber $ either (const 0) cellCount $ foldl f (pure diagram) preds
+          where
+            f :: OrError Diagram -> Int -> OrError Diagram
+            f diagram height = flip (slice p.signature) height =<< diagram
+            
+            cellCount :: Diagram -> Int
+            cellCount diagram = length $ diagramCells diagram
+            
+      in HH.input
+          [ HP.type_ InputNumber
+          , HP.min 0.0
+          , HP.step $ Step 1.0
+          , HP.max $ maxBound
+          , HP.value $ show currentHeight
+          , HE.onInput (HE.input (SetSlice (length preds)))
+          ]
+    ]
+  ]
 
 renderCache :: Project -> Array (H.ComponentHTML Query)
 renderCache project = maybeToArray do
@@ -280,7 +313,7 @@ renderCache project = maybeToArray do
     [ HH.h6_ [ HH.text (show boundary) ]
     , HH.div [ HE.onClick (HE.input_ ClearCache), classes ["clear-cache"] ]
       [ HH.text "×" ]
-    , renderDiagram Nothing project.signature diagram
+    , renderDiagram [] Nothing project.signature diagram
     ]
 
 renderSignature :: Signature -> H.ComponentHTML Query
@@ -315,19 +348,19 @@ renderSigmaCell sig dimension i cell =
             [ classes ["sigma-cell-preview"]
             , HE.onClick (HE.input (AttachCell cell))
             ]
-          [ renderDiagram Nothing sig source ]
+          [ renderDiagram [] Nothing sig source ]
         , HH.div
             [ classes ["sigma-cell-preview"]
             , HE.onClick (HE.input (AttachCell cell))
             ]
-          [ renderDiagram Nothing sig target ]
+          [ renderDiagram [] Nothing sig target ]
         ]
       _, _ -> 
         [ HH.div
             [ classes ["sigma-cell-preview"]
             , HE.onClick (HE.input (AttachCell cell))
             ]
-          [ renderDiagram Nothing sig $ liftCell cell ]
+          [ renderDiagram [] Nothing sig $ liftCell cell ]
         ]
     <> [ HH.div [classes ["sigma-cell-body"]]
       [ HH.p_
@@ -346,8 +379,8 @@ renderSigmaCell sig dimension i cell =
       ]
     ]
 
-renderDiagram :: Maybe Matches -> Signature -> Diagram -> H.ComponentHTML Query
-renderDiagram matches sig (Diagram {source:Nothing,cells:[dCell], dimension}) =
+renderDiagram :: Array Int -> Maybe Matches -> Signature -> Diagram -> H.ComponentHTML Query
+renderDiagram _ matches sig (Diagram {source:Nothing,cells:[dCell], dimension}) =
   fromMaybe blankDiagram $ fromError $ do
     cell <- getCell sig dCell.id
     let validMatch = [] `elem` fromMaybe [] (matches <#> _.rewrite)
@@ -355,15 +388,17 @@ renderDiagram matches sig (Diagram {source:Nothing,cells:[dCell], dimension}) =
     pure $ SVG.svg [SVG.viewBox 0 0 10 10] $
       [ dot 5 5 cell.display.colour ] <> overlay
 
-renderDiagram matches sig d@(Diagram {source:Just source,cells,dimension})
+renderDiagram sliceShown matches sig d@(Diagram {source:Just source,cells,dimension})
   | dimension == 1 = catch blankDiagram $ renderLineDiagram matches sig d
-  | otherwise      = catch blankDiagram $ render2DDiagram matches sig d
-renderDiagram _ _ _  = blankDiagram
+  | otherwise      = catch blankDiagram $ render2DDiagram sliceShown matches sig d
+renderDiagram _ _ _ _  = blankDiagram
 
-render2DDiagram :: Maybe Matches -> Signature -> Diagram
+render2DDiagram :: Array Int -> Maybe Matches -> Signature -> Diagram
                 -> OrError (H.ComponentHTML Query)
-render2DDiagram mMatches sig diagram = do
-  g@(GraphicalSlices source slices) <- drawDiagram sig diagram 
+render2DDiagram sliceShown mMatches sig diagram = do
+  diagram' <- let f acc height = acc >>= flip (slice sig) height in
+              foldl f (pure diagram) sliceShown
+  g@(GraphicalSlices source slices) <- drawDiagram sig diagram'
   let width = graphicalSlicesWidth g
   let height = length slices
   svgDiagram <- map concat $ sequence $ zipIndex (slicePairs g) <#>
@@ -452,14 +487,24 @@ render2DDiagram mMatches sig diagram = do
         topMatches = matches.source >>= case _ of
           [wire] ->
             let x = fromMaybe 0 $ source.cellPositions !! wire
+                width = (_-1) $ catch 1 $ getNumOutputs' sig matches.id
+                x' = fromMaybe 0 $ source.cellPositions !! (wire + width)
+                dx = toNumber (x' - x)
             in [matchOverlay (Just Source) [wire]
-              ("M"<>show(x*5-2)<>",0l2,2l2,-2v-1000h-4Z")]
+                ("M"<>show(x*5-2)<>",0l"<>show(dx*2.5+2.0)<>",2l"
+                    <>show(dx*2.5+2.0)<>",-2v-1000h"
+                    <>show(-dx*5.0-4.0)<>"Z")]
           _ -> []
         bottomMatches = matches.target >>= case _ of
           [wire] ->
             let x = fromMaybe 0 $ (topSlice g).cellPositions !! wire
+                width = (_-1) $ catch 1 $ getNumInputs' sig matches.id
+                x' = fromMaybe 0 $ (topSlice g).cellPositions !! (wire + width)
+                dx = toNumber (x' - x)
             in [matchOverlay (Just Target) [wire]
-              ("M"<>show(x*5-2)<>","<>show(height*10)<>"l2,-2l2,2v1000h-4Z")]
+                ("M"<>show(x*5-2)<>","<>show(height*10)<>"l"
+                    <>show(dx*2.5+2.0)<>",-2l"<>show(dx*2.5+2.0)<>",2v1000h"
+                    <>show(-dx*5.0-4.0)<>"Z")]
           _ -> []
         
       pure $ leftMatch <> rightMatch <> topMatches <> bottomMatches

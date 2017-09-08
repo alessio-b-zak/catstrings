@@ -3,7 +3,7 @@ module Rendering where
 import Prelude
 import Data.Foldable (maximum)
 import Data.Tuple (Tuple(..))
-import Data.Maybe (fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Array (cons, foldl, head, last, length, snoc, tail, zip)
 import Data.Traversable (sequence)
 import Utilities
@@ -83,7 +83,8 @@ slicePairs (GraphicalSlices source slices) =
 addSlice :: GraphicalSlices -> GraphicalSlice -> GraphicalSlices
 addSlice (GraphicalSlices source slices) newSlice = GraphicalSlices source (slices `snoc` newSlice)
 
-addGraphicalSlice :: Signature -> OrError GraphicalSlices -> Tuple Diagram DiagramCell -> OrError GraphicalSlices
+addGraphicalSlice :: Signature -> OrError GraphicalSlices -> Tuple Diagram DiagramCell
+                  -> OrError GraphicalSlices
 addGraphicalSlice signature mGraphicalSlices (Tuple dSlice diagramCell) = do
     gSlices <- mGraphicalSlices
     let gSlice = topSlice gSlices
@@ -119,16 +120,19 @@ calculateCellPositions signature gSlice diagram dCell = do
     key <- orError BadDimension $ last dCell.key
     inputCount <- getNumInputs signature dCell
     outputCount <- getNumOutputs signature dCell
-    let {left, mid, right} = splitInThree key inputCount gSlice.cellPositions
-    let leftBound = wiresRightBound 0 left
-    let centre = leftBound + (max 1 inputCount)
-    let leftBound' = centre - (max 1 outputCount)
-    let leftShift = max 0 $ leftBound - leftBound'
-    let outputs = spaceNWiresFrom (leftBound' + leftShift) outputCount
-    let rightBound = wiresLeftBound infinity right
-    let rightShift = leftShift + max 0 (leftBound + 2*(min 1 outputCount) - rightBound)
-    let rightWires = map (rightShift + _) right
-    let positions = left <> outputs <> rightWires
+    let
+      {left, mid, right} = splitInThree key inputCount gSlice.cellPositions
+      leftBound = wiresRightBound 0 left
+      centre = case head mid, last mid of
+        Just left, Just right -> (left + right) / 2
+        _, _ -> leftBound + 1
+      leftBound' = centre - (max 1 outputCount)
+      leftShift = max 0 $ leftBound - leftBound'
+      rightBound = wiresLeftBound infinity right
+      rightShift = leftShift + max 0 (leftBound + 2*(min 1 outputCount) - rightBound)
+      outputs = spaceNWiresFrom (leftBound' + leftShift) outputCount
+      rightWires = map (rightShift + _) right
+      positions = left <> outputs <> rightWires
     pure $
       { shifts: {leftBound, leftShift, rightBound, rightShift}
       , inputCount

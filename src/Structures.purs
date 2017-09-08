@@ -8,7 +8,7 @@ import Data.Foldable (and)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Color (Color)
-import Data.Array (zipWith)
+import Data.Array (replicate, zipWith)
 
 data CellID = CellID Int Int
 derive instance eqCellID :: Eq CellID
@@ -29,7 +29,16 @@ type Project =
   , initialized :: Boolean
   , viewControls :: ViewControls
   , matches :: Maybe Matches
-  } 
+  , sliceShown :: Array Int
+  }
+
+setDiagram :: Project -> Maybe Diagram -> Project
+setDiagram project Nothing =
+  project {diagram = Nothing, sliceShown = [], matches = Nothing}
+setDiagram project (Just diagram) =
+  project {diagram = Just diagram, sliceShown = replicate (dimension-2) 0, matches = Nothing}
+  where
+    dimension = diagramDimension diagram
 
 type DiagramCell = 
   { id :: CellID

@@ -2,8 +2,8 @@ module Utilities where
 
 import Prelude
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Array (cons, filter, head, tail, last, singleton
-                  , mapWithIndex, slice, take, drop, takeWhile, dropWhile)
+import Data.Array (cons, drop, dropWhile, filter, head, last, mapWithIndex
+                  , singleton, slice, snoc, tail, take, takeWhile, unsnoc)
 import Data.Monoid (class Monoid, mempty)
 import Data.Either (Either, either)
 import Data.String as Str
@@ -114,3 +114,8 @@ forEither_ value left right = either (void <<< left) (void <<< right) value
 
 foreign import rangeExcl :: Int -> Int -> Array Int
 infix 8 rangeExcl as ...
+
+unsnocs :: forall a. Array a -> Array (Tuple (Array a) a)
+unsnocs arr = case unsnoc arr of
+  Nothing -> []
+  Just { init: xs, last: x } -> unsnocs xs `snoc` Tuple xs x
