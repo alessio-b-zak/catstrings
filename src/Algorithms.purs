@@ -240,8 +240,6 @@ match signature baseDiagram matchDiagram
         
         source <- Unfoldable.fromMaybe $ diagramSource matchDiagram
         
-        -- match _ _ :: [[Int]]
-        -- submatch :: [Int]
         submatch <- match signature thisSlice source
         
         
